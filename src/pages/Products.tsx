@@ -1,4 +1,4 @@
-import  { useState } from "react";
+import { useState } from "react";
 import { mockProducts } from "../mocks/data";
 import { formatCurrency } from "../lib/utils";
 import { X } from "lucide-react";

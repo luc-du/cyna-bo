@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import {
   mockDashboardStats,
-  mockProducts,
   mockOrders,
   mockSupportTickets,
 } from "../mocks/data";
@@ -16,7 +15,7 @@ import { formatCurrency } from "../lib/utils";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchUserProfile } from "../store/authStore";
 import type { RootState, AppDispatch } from "../store/store";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
@@ -25,15 +24,25 @@ export default function Dashboard() {
   const { user, loading, isAuthenticated } = useSelector(
     (state: RootState) => state.auth
   );
-
+  const [profileFetched, setProfileFetched] = useState(false);
   useEffect(() => {
-    if (isAuthenticated && (!user || !user.firstname) && !loading) {
-      dispatch(fetchUserProfile());
+    if (isAuthenticated && !profileFetched && !loading) {
+      dispatch(fetchUserProfile())
+        .unwrap()
+        .then(() => setProfileFetched(true))
+        .catch(() => {
+          console.error("Redirection due to profile fetch failure");
+          navigate("/login");
+        });
     }
-  }, [isAuthenticated, user, loading, dispatch]);
+  }, [isAuthenticated, profileFetched, loading, dispatch, navigate]);
 
-  if (loading || !user || !user.firstname) {
-    return <div>Loading...</div>;
+  if (loading) {
+    return <div>Chargement...</div>;
+  }
+
+  if (!user || !user.firstname) {
+    return <div>Impossible de charger le profil utilisateur.</div>;
   }
 
   const stats = [

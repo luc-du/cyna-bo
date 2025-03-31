@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -6,8 +6,8 @@ import {
   Navigate,
 } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
-import { Provider } from "react-redux";
-import store from "./store/store";
+import { useDispatch } from "react-redux";
+import { validateToken, fetchUserProfile } from "./store/authStore";
 import LoginPage from "./pages/LoginPage";
 import DashboardLayout from "./components/layouts/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
@@ -15,8 +15,10 @@ import Products from "./pages/Products";
 import Orders from "./pages/Orders";
 import Support from "./pages/Support";
 import Settings from "./pages/Settings";
+import Users from "./pages/Users";
+import Categories from "./pages/Categories";
 import { useSelector } from "react-redux";
-import type { RootState } from "./store/store";
+import type { RootState, AppDispatch } from "./store/store";
 
 // ProtectedRoute qui redirige si non authentifié
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
@@ -34,35 +36,63 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
 };
 
 function App() {
+  const dispatch: AppDispatch = useDispatch();
+  const [authInitialized, setAuthInitialized] = useState(false); // Track initialization
+  const isAuthenticated = useSelector(
+    (state: RootState) => state.auth.isAuthenticated
+  );
+
+  useEffect(() => {
+    const initializeAuth = async () => {
+      const token = localStorage.getItem("token");
+      if (token) {
+        try {
+          await dispatch(validateToken()).unwrap();
+          await dispatch(fetchUserProfile()).unwrap();
+        } catch (error) {
+          console.error("Token validation failed:", error);
+          localStorage.removeItem("token");
+        }
+      }
+      setAuthInitialized(true); // Mark initialization as complete
+    };
+
+    initializeAuth();
+  }, [dispatch]);
+
+  if (!authInitialized) {
+    return <div>Chargement...</div>; // Show a loading state until auth is initialized
+  }
+
   return (
-    <Provider store={store}>
-      <Router>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
+    <Router>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
 
-          {/* Toutes les routes protégées sont regroupées sous "/dashboard" */}
-          <Route
-            path="/dashboard/*"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout />
-              </ProtectedRoute>
-            }
-          >
-            {/* Route index pour "/dashboard" affiche le Dashboard */}
-            <Route index element={<Dashboard />} />
-            <Route path="products" element={<Products />} />
-            <Route path="orders" element={<Orders />} />
-            <Route path="support" element={<Support />} />
-            <Route path="settings" element={<Settings />} />
-          </Route>
+        {/* Toutes les routes protégées sont regroupées sous "/dashboard" */}
+        <Route
+          path="/dashboard/*"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
+          {/* Route index pour "/dashboard" affiche le Dashboard */}
+          <Route index element={<Dashboard />} />
+          <Route path="products" element={<Products />} />
+          <Route path="categories" element={<Categories />} /> {/* New Route */}
+          <Route path="orders" element={<Orders />} />
+          <Route path="support" element={<Support />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="users" element={<Users />} />
+        </Route>
 
-          {/* Redirige toute autre route vers "/dashboard" */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </Router>
+        {/* Redirige toute autre route vers "/dashboard" */}
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
       <Toaster position="top-right" />
-    </Provider>
+    </Router>
   );
 }
 

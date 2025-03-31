@@ -6,6 +6,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { loginUser, registerUser } from "../store/authStore";
 import type { RootState } from "../store/store";
 import store from "../store/store";
+import logo from "../assets/cyna.jpeg";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -52,6 +53,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-lg shadow-lg">
         <div>
+          <img className="mx-auto h-12 w-auto" src={logo} alt="Cyna Logo" />
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             {isSignup ? "Créer un compte" : "Connectez-vous à votre compte"}
           </h2>

@@ -49,10 +49,13 @@ export const loginUser = createAsyncThunk(
   ) => {
     try {
       const response = await axios.post(`${API_BASE_URL}/signin`, userData);
-      localStorage.setItem("token", response.data.token);
-      console.log("Token reçu (login) :", response.data.token);
-      // On retourne uniquement le token afin que state.user reste null
-      return { token: response.data.token };
+      const token = response.data.token;
+      if (!token) {
+        throw new Error("Token non reçu");
+      }
+      localStorage.setItem("token", token);
+      console.log("Token stocké (login):", token);
+      return { token };
     } catch (error) {
       return rejectWithValue(
         (error as any).response?.data || "Email ou mot de passe incorrect !"
@@ -67,12 +70,13 @@ export const validateToken = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem("token");
+      console.log("Token récupéré (validateToken):", token);
       if (!token) {
         throw new Error("Token non disponible");
       }
       const response = await axios.post(
         `${API_BASE_URL}/validate`,
-        {},
+        { token }, // Ici, on envoie le token dans le body
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -93,29 +97,32 @@ export const fetchUserProfile = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem("token");
-      console.log("Token dans fetchUserProfile :", token);
+      console.log("Token récupéré (fetchUserProfile):", token);
       if (!token) {
         throw new Error("Token non disponible");
       }
-      // Décodage du token
-      const decodedToken: { jti: string } = jwtDecode(token);
-      console.log("Token décodé :", decodedToken);
-      const userId = decodedToken.jti;
-      console.log("Récupération de l'id user depuis auth slice :", userId);
 
+      // Decode the token to extract the user ID
+      const decodedToken: any = JSON.parse(atob(token.split(".")[1]));
+      const userId = decodedToken.jti; // Adjust based on your backend's token structure
+
+      if (!userId) {
+        throw new Error("User ID non disponible dans le token");
+      }
+
+      // Use the user ID in the API call
       const response = await axios.get(`${USER_API_BASE_URL}/${userId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      console.log("Réponse de l'API (profil) :", response.data);
       return response.data;
     } catch (error) {
       console.error(
-        "Erreur API (profil) :",
-        (error as any).response?.data || (error as any).message
+        "Erreur lors de la récupération du profil utilisateur:",
+        error
       );
       return rejectWithValue(
-        (error as any).response?.data ||
+        (error as any).response?.data?.message ||
           "Impossible de récupérer le profil utilisateur"
       );
     }
@@ -132,7 +139,7 @@ interface AuthState {
 
 const initialState: AuthState = {
   user: null,
-  isAuthenticated: false,
+  isAuthenticated: !!localStorage.getItem("token"), // Initialize based on token presence
   loading: false,
   error: null,
 };
@@ -189,6 +196,7 @@ const authSlice = createSlice({
       .addCase(fetchUserProfile.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
+        console.error("Profile fetch failed:", action.payload); // Log the error
       });
   },
 });

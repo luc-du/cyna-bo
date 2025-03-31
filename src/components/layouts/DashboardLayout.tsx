@@ -9,17 +9,22 @@ import {
   LogOut,
   Menu,
   X,
+  UsersIcon,
+  Folder,
 } from "lucide-react";
 import { useSelector } from "react-redux";
 import type { RootState } from "../../store/store";
 import { cn } from "../../lib/utils";
+import logo from "../../assets/cyna_it_logo.jpeg";
 
 const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Produits", href: "/products", icon: Package },
-  { name: "Commandes", href: "/orders", icon: ShoppingCart },
-  { name: "Support", href: "/support", icon: HeadphonesIcon },
-  { name: "Parametres", href: "/settings", icon: Settings },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Produits", href: "/dashboard/products", icon: Package },
+  { name: "Catégories", href: "/dashboard/categories", icon: Folder },
+  { name: "Commandes", href: "/dashboard/orders", icon: ShoppingCart },
+  { name: "Support", href: "/dashboard/support", icon: HeadphonesIcon },
+  { name: "Parametres", href: "/dashboard/settings", icon: Settings },
+  { name: "Utilisateurs", href: "/dashboard/users", icon: UsersIcon },
 ];
 
 const DashboardLayout: React.FC = () => {
@@ -56,7 +61,8 @@ const DashboardLayout: React.FC = () => {
             </div>
             <div className="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
               <div className="flex-shrink-0 flex items-center px-4">
-                <h1 className="text-xl font-bold">Admin Dashboard</h1>
+                <img className="h-8 w-auto" src={logo} alt="Cyna Logo" />
+                <h1 className="ml-2 text-xl font-bold">Admin Dashboard</h1>
               </div>
               <nav className="mt-5 px-2 space-y-1">
                 {navigation.map((item) => (
@@ -90,7 +96,8 @@ const DashboardLayout: React.FC = () => {
         <div className="flex-1 flex flex-col min-h-0 bg-white border-r border-gray-200">
           <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
             <div className="flex items-center flex-shrink-0 px-4">
-              <h1 className="text-xl font-bold">Admin Dashboard</h1>
+              <img className="h-8 w-auto" src={logo} alt="Cyna Logo" />
+              <h1 className="ml-2 text-xl font-bold">Admin Dashboard</h1>
             </div>
             <nav className="mt-5 flex-1 px-2 space-y-1">
               {navigation.map((item) => (

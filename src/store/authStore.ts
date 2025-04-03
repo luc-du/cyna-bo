@@ -27,7 +27,6 @@ export const registerUser = createAsyncThunk(
       });
       localStorage.setItem("token", response.data.token);
       console.log("Token reçu (signup) :", response.data.token);
-      // Ici, on ne stocke pas le token dans state.user pour forcer la récupération du profil
       return { token: response.data.token };
     } catch (error) {
       if ((error as any).response?.data?.message?.includes("Duplicate entry")) {
@@ -76,7 +75,7 @@ export const validateToken = createAsyncThunk(
       }
       const response = await axios.post(
         `${API_BASE_URL}/validate`,
-        { token }, // Ici, on envoie le token dans le body
+        { token },
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -102,15 +101,13 @@ export const fetchUserProfile = createAsyncThunk(
         throw new Error("Token non disponible");
       }
 
-      // Decode the token to extract the user ID
       const decodedToken: any = JSON.parse(atob(token.split(".")[1]));
-      const userId = decodedToken.jti; // Adjust based on your backend's token structure
+      const userId = decodedToken.jti; 
 
       if (!userId) {
         throw new Error("User ID non disponible dans le token");
       }
 
-      // Use the user ID in the API call
       const response = await axios.get(`${USER_API_BASE_URL}/${userId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -139,7 +136,7 @@ interface AuthState {
 
 const initialState: AuthState = {
   user: null,
-  isAuthenticated: !!localStorage.getItem("token"), // Initialize based on token presence
+  isAuthenticated: !!localStorage.getItem("token"),
   loading: false,
   error: null,
 };
@@ -158,7 +155,6 @@ const authSlice = createSlice({
     builder
       .addCase(registerUser.fulfilled, (state, action) => {
         state.isAuthenticated = true;
-        // state.user reste null afin que fetchUserProfile soit appelé ensuite
         state.error = null;
       })
       .addCase(registerUser.rejected, (state, action) => {
@@ -166,7 +162,6 @@ const authSlice = createSlice({
       })
       .addCase(loginUser.fulfilled, (state, action) => {
         state.isAuthenticated = true;
-        // Ne pas affecter state.user ici pour forcer la récupération du profil complet
         state.error = null;
       })
       .addCase(loginUser.rejected, (state, action) => {
@@ -196,7 +191,7 @@ const authSlice = createSlice({
       .addCase(fetchUserProfile.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
-        console.error("Profile fetch failed:", action.payload); // Log the error
+        console.error("Profile fetch failed:", action.payload);
       });
   },
 });

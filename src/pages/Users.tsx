@@ -1,281 +1,241 @@
 import React, { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import {
-  fetchUsers,
-  createUser,
-  updateUser,
-  deleteUser,
-} from "../store/userStore";
+import { fetchUsers, createUser, updateUser, deleteUser, searchUsers } from "../store/userStore";
 import type { RootState, AppDispatch } from "../store/store";
-
-// Composant Modal simple pour la confirmation
-const Modal = ({
-  isOpen,
-  title,
-  message,
-  onCancel,
-  onConfirm,
-}: {
-  isOpen: boolean;
-  title: string;
-  message: string;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-50">
-      <div className="bg-white p-6 rounded shadow-md max-w-sm">
-        <h2 className="text-xl font-bold mb-4">{title}</h2>
-        <p className="mb-4">{message}</p>
-        <div className="flex justify-end space-x-4">
-          <button
-            onClick={onCancel}
-            className="bg-gray-500 text-white px-4 py-2 rounded"
-          >
-            Annuler
-          </button>
-          <button
-            onClick={onConfirm}
-            className="bg-red-600 text-white px-4 py-2 rounded"
-          >
-            Confirmer
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 export default function Users() {
   const dispatch = useDispatch<AppDispatch>();
-  const { users, loading, error } = useSelector(
-    (state: RootState) => state.users
-  );
+  const { users, loading, error } = useSelector((state: RootState) => state.users);
+  const loggedInUser = useSelector((state: RootState) => state.auth.user);
 
-  const [newUser, setNewUser] = useState({
+  const [searchTerm, setSearchTerm] = useState("");
+  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [userToDelete, setUserToDelete] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState({
     firstname: "",
     lastname: "",
     email: "",
-    roles: "ADMIN",
+    phone: "",
+    role: "",
+    enabled: false,
   });
-  const [editingUser, setEditingUser] = useState<any | null>(null);
-  const [userToDelete, setUserToDelete] = useState<any | null>(null);
 
   useEffect(() => {
     dispatch(fetchUsers());
   }, [dispatch]);
 
-  const handleCreateUser = () => {
-    // Validation basique
-    if (!newUser.firstname || !newUser.lastname || !newUser.email) {
-      alert("Veuillez remplir tous les champs obligatoires.");
-      return;
-    }
-    dispatch(createUser(newUser));
-    setNewUser({ firstname: "", lastname: "", email: "", roles: "ADMIN" });
-  };
-
-  const handleUpdateUser = () => {
-    if (editingUser) {
-      const userData = {
-        firstname: editingUser.firstname,
-        lastname: editingUser.lastname,
-        email: editingUser.email,
-        phone: editingUser.phone || null,
-        roles: editingUser.roles, // Utilisation de "roles" de manière cohérente
-        password: editingUser.password || null,
-        profile: editingUser.profile || null,
-        enabled: editingUser.enabled,
-      };
-      dispatch(updateUser({ id: editingUser.id, userData }));
-      setEditingUser(null);
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    if (value.trim() === "") {
+      dispatch(fetchUsers()); // Recharge tous les users si champ vide
+    } else {
+      dispatch(searchUsers(value));
     }
   };
 
-  const handleConfirmDelete = () => {
-    if (userToDelete) {
-      dispatch(deleteUser(userToDelete.id));
-      setUserToDelete(null);
-    }
+  const handleEdit = (user: any) => {
+    setEditForm({
+      firstname: user.firstname,
+      lastname: user.lastname,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      enabled: user.enabled,
+    });
+    setEditingUser(user);
   };
 
-  const handleCancelDelete = () => {
-    setUserToDelete(null);
+  const handleSave = async () => {
+    await dispatch(updateUser({ id: editingUser.id, userData: editForm }));
+    setEditingUser(null);
+    dispatch(fetchUsers()); // Recharge après mise à jour
   };
+  
 
   return (
     <div className="px-4 sm:px-6 lg:px-8">
-      {/* Modal de confirmation pour la suppression */}
-      <Modal
-        isOpen={!!userToDelete}
-        title="Confirmation de suppression"
-        message="Êtes-vous sûr de vouloir supprimer cet utilisateur ?"
-        onCancel={handleCancelDelete}
-        onConfirm={handleConfirmDelete}
-      />
-      <h1 className="text-2xl font-semibold text-gray-900">
-        Gestion des utilisateurs
-      </h1>
-      <p className="mt-2 text-sm text-gray-700">
-        Liste des utilisateurs enregistrés dans l'application.
-      </p>
-      {loading && <p>Chargement...</p>}
-      {error && <p className="text-red-500">{error}</p>}
-      {!loading && !error && (
-        <div className="mt-8">
-          {/* Formulaire de création d'utilisateur */}
-          <div className="mb-4">
-            <h2 className="text-lg font-medium text-gray-900">
-              Créer un nouvel utilisateur
-            </h2>
-            <div className="flex space-x-4">
-              <input
-                type="text"
-                placeholder="Prénom"
-                value={newUser.firstname}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, firstname: e.target.value })
-                }
-                className="border rounded px-2 py-1"
-              />
-              <input
-                type="text"
-                placeholder="Nom"
-                value={newUser.lastname}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, lastname: e.target.value })
-                }
-                className="border rounded px-2 py-1"
-              />
-              <input
-                type="email"
-                placeholder="Email"
-                value={newUser.email}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, email: e.target.value })
-                }
-                className="border rounded px-2 py-1"
-              />
+      <h1 className="text-2xl font-semibold text-gray-900 mt-5 mb-4">Gestion des utilisateurs</h1>
+
+      {/* Edit Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium">Modifier l'utilisateur</h3>
               <button
-                onClick={handleCreateUser}
-                className="bg-indigo-600 text-white px-4 py-2 rounded"
+                onClick={() => setEditingUser(null)}
+                className="text-gray-400 hover:text-gray-500"
               >
-                Créer
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSave();
+              }}
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Prénom</label>
+                  <input
+                    type="text"
+                    value={editForm.firstname ||"" }
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, firstname: e.target.value })
+                    }
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Nom</label>
+                  <input
+                    type="text"
+                    value={editForm.lastname || ""}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, lastname: e.target.value })
+                    }
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Email</label>
+                  <input
+                    type="email"
+                    value={editForm.email || ""}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, email: e.target.value })
+                    }
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Téléphone</label>
+                  <input
+                    type="text"
+                    value={editForm.phone || ""}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, phone: e.target.value })
+                    }
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Rôle</label>
+                  <select
+                    value={editForm.role || ""}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, role: e.target.value })
+                    }
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  >
+                    <option value="">-- Rôle --</option>
+                    <option value="ADMIN">ADMIN</option>
+                    <option value="CLIENT">CLIENT</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={editForm.enabled}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, enabled: e.target.checked })
+                      }
+                    />
+                    <span>Compte activé</span>
+                  </label>
+                </div>
+              </div>
+              <div className="mt-5 sm:mt-6">
+                <button
+                  type="submit"
+                  className="inline-flex w-full justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:text-sm"
+                >
+                  Sauvegarder les changements
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Modal */}
+      {userToDelete && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium">Confirmation de suppression</h3>
+              <button
+                onClick={async () => {
+                  await dispatch(deleteUser(userToDelete.id));
+                  setUserToDelete(null);
+                  dispatch(fetchUsers());
+                }}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <p className="mb-4">
+              Êtes-vous sûr de vouloir supprimer cet utilisateur ?
+            </p>
+            <div className="flex justify-end space-x-4">
+              <button
+                onClick={async () => {
+                  await dispatch(deleteUser(userToDelete.id));
+                  setUserToDelete(null);
+                  dispatch(fetchUsers());
+                }}
+                className="bg-gray-500 text-white px-4 py-2 rounded"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  dispatch(deleteUser(userToDelete.id));
+                  setUserToDelete(null);
+                }}
+                className="bg-red-600 text-white px-4 py-2 rounded"
+              >
+                Confirmer
               </button>
             </div>
           </div>
-          {/* Tableau des utilisateurs */}
-          <table className="min-w-full divide-y divide-gray-300">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">
-                  Nom
-                </th>
-                <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                  Email
-                </th>
-                <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                  Rôle
-                </th>
-                <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {users.map((user) => (
-                <tr key={user.id}>
-                  <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
-                    {editingUser?.id === user.id ? (
-                      <input
-                        type="text"
-                        value={editingUser.firstname}
-                        onChange={(e) =>
-                          setEditingUser({
-                            ...editingUser,
-                            firstname: e.target.value,
-                          })
-                        }
-                        className="border rounded px-2 py-1"
-                      />
-                    ) : (
-                      `${user.firstname} ${user.lastname}`
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                    {editingUser?.id === user.id ? (
-                      <input
-                        type="email"
-                        value={editingUser.email}
-                        onChange={(e) =>
-                          setEditingUser({
-                            ...editingUser,
-                            email: e.target.value,
-                          })
-                        }
-                        className="border rounded px-2 py-1"
-                      />
-                    ) : (
-                      user.email
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                    {editingUser?.id === user.id ? (
-                      <input
-                        type="text"
-                        value={editingUser.roles}
-                        onChange={(e) =>
-                          setEditingUser({
-                            ...editingUser,
-                            roles: e.target.value,
-                          })
-                        }
-                        className="border rounded px-2 py-1"
-                      />
-                    ) : (
-                      user.roles || user.role
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 space-x-2">
-                    {editingUser?.id === user.id ? (
-                      <>
-                        <button
-                          onClick={handleUpdateUser}
-                          className="bg-green-600 text-white px-4 py-2 rounded"
-                        >
-                          Sauvegarder
-                        </button>
-                        <button
-                          onClick={() => setEditingUser(null)}
-                          className="bg-gray-600 text-white px-4 py-2 rounded"
-                        >
-                          Annuler
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => setEditingUser(user)}
-                          className="bg-yellow-600 text-white px-4 py-2 rounded"
-                        >
-                          Modifier
-                        </button>
-                        <button
-                          onClick={() => setUserToDelete(user)}
-                          className="bg-red-600 text-white px-4 py-2 rounded"
-                        >
-                          Supprimer
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       )}
+
+      <input type="text" placeholder="Rechercher par nom..." value={searchTerm} onChange={handleSearch} className="mb-4 border px-3 py-2 rounded w-full max-w-md" />
+
+      <table className="min-w-full divide-y divide-gray-300 rounded-lg overflow-hidden shadow">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="py-4 px-4 text-left text-sm font-semibold">Nom</th>
+            <th className="py-4 px-4 text-left text-sm font-semibold">Email</th>
+            <th className="py-4 px-4 text-left text-sm font-semibold">Téléphone</th>
+            <th className="py-4 px-4 text-left text-sm font-semibold">Rôle</th>
+            <th className="py-4 px-4 text-left text-sm font-semibold">Activé</th>
+            <th className="py-4 px-4 text-left text-sm font-semibold">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {users.filter((u) => u.id !== Number(loggedInUser?.id)).map((user) => (
+            <tr key={user.id} className="hover:bg-gray-100">
+              <td className="py-4 px-4">{user.firstname} {user.lastname}</td>
+              <td className="py-4 px-4">{user.email}</td>
+              <td className="py-4 px-4">{user.phone}</td>
+              <td className="py-4 px-4">{user.roles}</td>
+              <td className="py-4 px-4">{user.enabled ? "Oui" : "Non"}</td>
+              <td className="py-4 px-4">
+                <button onClick={() => handleEdit(user)} className="bg-yellow-500 text-white px-3 py-1 rounded">Modifier</button>
+                <button onClick={() => setUserToDelete(user)} className="bg-red-600 text-white px-3 py-1 rounded ml-2">Supprimer</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

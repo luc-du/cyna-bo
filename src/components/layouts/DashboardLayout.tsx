@@ -6,8 +6,8 @@ import {
   ShoppingCart,
   HeadphonesIcon,
   Settings,
-  LogOut,
   Menu,
+  LogOut,
   X,
   UsersIcon,
   Folder,
@@ -17,6 +17,7 @@ import type { RootState } from "../../store/store";
 import { cn } from "../../lib/utils";
 import logo from "../../assets/cyna_it_logo.jpeg";
 
+// Navigation links
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Produits", href: "/dashboard/products", icon: Package },
@@ -33,13 +34,12 @@ const DashboardLayout: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
 
   const handleLogout = () => {
-    // Implement logout functionality using Redux
     navigate("/login");
   };
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Mobile sidebar */}
+      {/* Sidebar mobile */}
       <div
         className={cn(
           "fixed inset-0 z-50 lg:hidden",
@@ -55,7 +55,7 @@ const DashboardLayout: React.FC = () => {
                 className="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
                 onClick={() => setSidebarOpen(false)}
               >
-                <span className="sr-only">Close sidebar</span>
+                <span className="sr-only">Fermer la sidebar</span>
                 <X className="h-6 w-6 text-white" />
               </button>
             </div>
@@ -69,6 +69,7 @@ const DashboardLayout: React.FC = () => {
                   <NavLink
                     key={item.name}
                     to={item.href}
+                    end={item.href === "/dashboard"} // important !
                     className={({ isActive }) =>
                       cn(
                         isActive
@@ -78,10 +79,7 @@ const DashboardLayout: React.FC = () => {
                       )
                     }
                   >
-                    <item.icon
-                      className="mr-4 flex-shrink-0 h-6 w-6"
-                      aria-hidden="true"
-                    />
+                    <item.icon className="mr-4 flex-shrink-0 h-6 w-6" aria-hidden="true" />
                     {item.name}
                   </NavLink>
                 ))}
@@ -91,7 +89,7 @@ const DashboardLayout: React.FC = () => {
         </div>
       </div>
 
-      {/* Static sidebar for desktop */}
+      {/* Sidebar desktop */}
       <div className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0">
         <div className="flex-1 flex flex-col min-h-0 bg-white border-r border-gray-200">
           <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
@@ -104,6 +102,7 @@ const DashboardLayout: React.FC = () => {
                 <NavLink
                   key={item.name}
                   to={item.href}
+                  end={item.href === "/dashboard"} // <--- FIX ICI
                   className={({ isActive }) =>
                     cn(
                       isActive
@@ -113,10 +112,7 @@ const DashboardLayout: React.FC = () => {
                     )
                   }
                 >
-                  <item.icon
-                    className="mr-3 flex-shrink-0 h-6 w-6"
-                    aria-hidden="true"
-                  />
+                  <item.icon className="mr-3 flex-shrink-0 h-6 w-6" aria-hidden="true" />
                   {item.name}
                 </NavLink>
               ))}
@@ -124,16 +120,14 @@ const DashboardLayout: React.FC = () => {
           </div>
           <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
             <div className="flex items-center">
-              <div>
-                <img className="inline-block h-9 w-9 rounded-full" alt="" />
-              </div>
+              <img className="inline-block h-9 w-9 rounded-full" src={logo} alt="Cyna Logo" />
               <div className="ml-3">
-                <p className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                <p className="text-sm font-medium text-gray-700">
                   {user?.firstname}
                 </p>
                 <button
                   onClick={handleLogout}
-                  className="flex items-center text-xs font-medium text-gray-500 group-hover:text-gray-700"
+                  className="flex items-center text-xs font-medium text-gray-500 hover:text-gray-700"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
                   Se déconnecter
@@ -144,7 +138,7 @@ const DashboardLayout: React.FC = () => {
         </div>
       </div>
 
-      {/* Main content */}
+      {/* Contenu principal */}
       <div className="lg:pl-64 flex flex-col flex-1">
         <div className="sticky top-0 z-10 lg:hidden pl-1 pt-1 sm:pl-3 sm:pt-3 bg-gray-100">
           <button

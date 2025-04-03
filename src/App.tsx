@@ -20,7 +20,6 @@ import Categories from "./pages/Categories";
 import { useSelector } from "react-redux";
 import type { RootState, AppDispatch } from "./store/store";
 
-// ProtectedRoute qui redirige si non authentifié
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -37,7 +36,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
 
 function App() {
   const dispatch: AppDispatch = useDispatch();
-  const [authInitialized, setAuthInitialized] = useState(false); // Track initialization
+  const [authInitialized, setAuthInitialized] = useState(false); 
   const isAuthenticated = useSelector(
     (state: RootState) => state.auth.isAuthenticated
   );
@@ -61,15 +60,13 @@ function App() {
   }, [dispatch]);
 
   if (!authInitialized) {
-    return <div>Chargement...</div>; // Show a loading state until auth is initialized
+    return <div>Chargement...</div>;
   }
 
   return (
     <Router>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-
-        {/* Toutes les routes protégées sont regroupées sous "/dashboard" */}
         <Route
           path="/dashboard/*"
           element={
@@ -78,17 +75,15 @@ function App() {
             </ProtectedRoute>
           }
         >
-          {/* Route index pour "/dashboard" affiche le Dashboard */}
           <Route index element={<Dashboard />} />
           <Route path="products" element={<Products />} />
-          <Route path="categories" element={<Categories />} /> {/* New Route */}
+          <Route path="categories" element={<Categories />} />
           <Route path="orders" element={<Orders />} />
           <Route path="support" element={<Support />} />
           <Route path="settings" element={<Settings />} />
           <Route path="users" element={<Users />} />
         </Route>
 
-        {/* Redirige toute autre route vers "/dashboard" */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
       <Toaster position="top-right" />

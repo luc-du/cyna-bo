@@ -22,9 +22,10 @@ export default function Dashboard() {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const { user, loading, isAuthenticated } = useSelector(
-    (state: RootState) => state.auth
+    (state: RootState) => state.auth as { user: any; loading: boolean; isAuthenticated: boolean }
   );
   const [profileFetched, setProfileFetched] = useState(false);
+
   useEffect(() => {
     if (isAuthenticated && !profileFetched && !loading) {
       dispatch(fetchUserProfile())
@@ -80,7 +81,7 @@ export default function Dashboard() {
     <div className="px-4 sm:px-6 lg:px-8">
       <div className="sm:flex sm:items-center">
         <div className="sm:flex-auto">
-          <h1 className="text-2xl font-semibold text-gray-900">
+          <h1 className="text-2xl font-semibold text-gray-900 mt-5">
             Tableau de bord
           </h1>
           {user && (
@@ -90,6 +91,7 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
       <div className="mt-8">
         <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {stats.map((item) => (
@@ -99,10 +101,7 @@ export default function Dashboard() {
             >
               <dt>
                 <div className="absolute rounded-md bg-indigo-500 p-3">
-                  <item.icon
-                    className="h-6 w-6 text-white"
-                    aria-hidden="true"
-                  />
+                  <item.icon className="h-6 w-6 text-white" aria-hidden="true" />
                 </div>
                 <p className="ml-16 truncate text-sm font-medium text-gray-500">
                   {item.name}
@@ -131,13 +130,16 @@ export default function Dashboard() {
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
-        {/* Recent Orders */}
+        {/* Commandes récentes */}
         <div className="bg-white shadow rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-medium text-gray-900">
               Commandes récentes
             </h2>
-            <span className="text-sm text-indigo-600 hover:text-indigo-900 cursor-pointer">
+            <span
+              onClick={() => navigate("/dashboard/orders")}
+              className="text-sm text-indigo-600 hover:text-indigo-900 cursor-pointer"
+            >
               Voir tout
             </span>
           </div>
@@ -148,7 +150,7 @@ export default function Dashboard() {
                   <div className="flex items-center space-x-4">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">
-                        Order #{order.id}
+                        Commande #{order.id}
                       </p>
                       <p className="text-sm text-gray-500">
                         {new Date(order.createdAt).toLocaleDateString()}
@@ -166,13 +168,16 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Recent Support Tickets */}
+        {/* Tickets de support */}
         <div className="bg-white shadow rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-medium text-gray-900">
               Tickets de support
             </h2>
-            <span className="text-sm text-indigo-600 hover:text-indigo-900 cursor-pointer">
+            <span
+              onClick={() => navigate("/dashboard/support")}
+              className="text-sm text-indigo-600 hover:text-indigo-900 cursor-pointer"
+            >
               Voir tout
             </span>
           </div>

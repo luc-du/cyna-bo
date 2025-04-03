@@ -17,7 +17,7 @@ export default function Support() {
     <div className="px-4 sm:px-6 lg:px-8">
       <div className="sm:flex sm:items-center">
         <div className="sm:flex-auto">
-          <h1 className="text-2xl font-semibold text-gray-900">
+          <h1 className="text-2xl font-semibold text-gray-900 mt-5">
             Tickets de support
           </h1>
           <p className="mt-2 text-sm text-gray-700">

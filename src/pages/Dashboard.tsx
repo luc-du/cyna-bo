@@ -5,17 +5,19 @@ import {
   ShoppingCart,
   ArrowUpRight,
   ArrowDownRight,
+  Folder,
 } from "lucide-react";
 import {
   mockDashboardStats,
   mockOrders,
   mockSupportTickets,
 } from "../mocks/data";
-import { formatCurrency } from "../lib/utils";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchUserProfile } from "../store/authStore";
+import { fetchProducts } from "../store/productStore";
+import { fetchCategories } from "../store/categoryStore";
 import type { RootState, AppDispatch } from "../store/store";
-import React, { useEffect, useState } from "react";
+import  { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
@@ -24,15 +26,25 @@ export default function Dashboard() {
   const { user, loading, isAuthenticated } = useSelector(
     (state: RootState) => state.auth as { user: any; loading: boolean; isAuthenticated: boolean }
   );
+  const { products } = useSelector((state: RootState) => state.products);
+  const { categories } = useSelector((state: RootState) => state.categories);
   const [profileFetched, setProfileFetched] = useState(false);
+  const isRedirectingRef = useRef(false);
 
   useEffect(() => {
-    if (isAuthenticated && !profileFetched && !loading) {
+    // Prevent multiple fetch attempts if we're already redirecting
+    if (isAuthenticated && !profileFetched && !loading && !isRedirectingRef.current) {
       dispatch(fetchUserProfile())
         .unwrap()
-        .then(() => setProfileFetched(true))
+        .then(() => {
+          setProfileFetched(true);
+          // Only fetch products and categories after successful profile fetch
+          dispatch(fetchProducts());
+          dispatch(fetchCategories());
+        })
         .catch(() => {
           console.error("Redirection due to profile fetch failure");
+          isRedirectingRef.current = true; // Mark that we're redirecting
           navigate("/login");
         });
     }
@@ -42,6 +54,10 @@ export default function Dashboard() {
     return <div>Chargement...</div>;
   }
 
+  if (!isAuthenticated) {
+    return null; // Don't render anything if not authenticated
+  }
+
   if (!user || !user.firstname) {
     return <div>Impossible de charger le profil utilisateur.</div>;
   }
@@ -49,7 +65,7 @@ export default function Dashboard() {
   const stats = [
     {
       name: "Total des ventes",
-      value: formatCurrency(mockDashboardStats.totalSales),
+      value: mockDashboardStats.totalSales + " €",
       change: "+12.5%",
       trend: "up",
       icon: DollarSign,
@@ -63,7 +79,7 @@ export default function Dashboard() {
     },
     {
       name: "Valeur moyenne des commandes",
-      value: formatCurrency(mockDashboardStats.averageOrderValue),
+      value: mockDashboardStats.averageOrderValue + " €",
       change: "-3.1%",
       trend: "down",
       icon: BarChart3,
@@ -74,8 +90,18 @@ export default function Dashboard() {
       change: "+2.3%",
       trend: "up",
       icon: Package,
-    },
+    }
   ];
+
+  // Get the most recent 3 products
+  const recentProducts = [...products]
+    .sort((a, b) => Number(b.id) - Number(a.id))
+    .slice(0, 3);
+
+  // Get the most recent 3 categories
+  const recentCategories = [...categories]
+    .sort((a, b) => b.id - a.id)
+    .slice(0, 3);
 
   return (
     <div className="px-4 sm:px-6 lg:px-8">
@@ -158,7 +184,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex-shrink-0">
                       <span className="text-sm font-medium text-gray-900">
-                        {formatCurrency(order.amount)}
+                        {order.amount}
                       </span>
                     </div>
                   </div>
@@ -211,6 +237,118 @@ export default function Dashboard() {
                 </li>
               ))}
             </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Second row for Products and Categories */}
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
+        {/* Produits récents */}
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-medium text-gray-900">
+              Produits récents
+            </h2>
+            <span
+              onClick={() => navigate("/dashboard/products")}
+              className="text-sm text-indigo-600 hover:text-indigo-900 cursor-pointer"
+            >
+              Voir tout
+            </span>
+          </div>
+          <div className="flow-root">
+            {products && products.length > 0 ? (
+              <ul className="-my-5 divide-y divide-gray-200">
+                {recentProducts.map((product) => (
+                  <li key={product.id} className="py-4">
+                    <div className="flex items-center space-x-4">
+                      <div className="flex-shrink-0">
+                        {product.images && product.images.length > 0 ? (
+                          <img
+                            src={`http://localhost:8082${product.images[0].url}`}
+                            alt={product.name}
+                            className="h-12 w-12 rounded-md object-cover"
+                          />
+                        ) : (
+                          <div className="h-12 w-12 rounded-md bg-gray-200 flex items-center justify-center">
+                            <Package className="h-6 w-6 text-gray-400" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {product.name}
+                        </p>
+                        <p className="text-sm text-gray-500 truncate">
+                          {product.description || "Non spécifié"}
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <span className="text-sm font-medium text-gray-900">
+                          {product.price}
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-center py-4 text-gray-500">
+                Aucun produit disponible
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Catégories récentes */}
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-medium text-gray-900">
+              Catégories récentes
+            </h2>
+            <span
+              onClick={() => navigate("/dashboard/categories")}
+              className="text-sm text-indigo-600 hover:text-indigo-900 cursor-pointer"
+            >
+              Voir tout
+            </span>
+          </div>
+          <div className="flow-root">
+            {categories && categories.length > 0 ? (
+              <ul className="-my-5 divide-y divide-gray-200">
+                {recentCategories.map((category) => (
+                  <li key={category.id} className="py-4">
+                    <div className="flex items-center space-x-4">
+                      <div className="flex-shrink-0">
+                        {category.images && category.images.length > 0 ? (
+                          <img
+                            src={`http://localhost:8082${category.images[0].url}`}
+                            alt={category.name}
+                            className="h-12 w-12 rounded-md object-cover"
+                          />
+                        ) : (
+                          <div className="h-12 w-12 rounded-md bg-gray-200 flex items-center justify-center">
+                            <Folder className="h-6 w-6 text-gray-400" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {category.name}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {category.products.length|| 0} produits
+                        </p>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-center py-4 text-gray-500">
+                Aucune catégorie disponible
+              </div>
+            )}
           </div>
         </div>
       </div>

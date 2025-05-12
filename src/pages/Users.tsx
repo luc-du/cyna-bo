@@ -29,7 +29,7 @@ export default function Users() {
     const value = e.target.value;
     setSearchTerm(value);
     if (value.trim() === "") {
-      dispatch(fetchUsers()); // Recharge tous les users si champ vide
+      dispatch(fetchUsers());
     } else {
       dispatch(searchUsers(value));
     }
@@ -50,7 +50,7 @@ export default function Users() {
   const handleSave = async () => {
     await dispatch(updateUser({ id: editingUser.id, userData: editForm }));
     setEditingUser(null);
-    dispatch(fetchUsers()); // Recharge après mise à jour
+    dispatch(fetchUsers()); 
   };
   
 
@@ -227,10 +227,28 @@ export default function Users() {
               <td className="py-4 px-4">{user.email}</td>
               <td className="py-4 px-4">{user.phone}</td>
               <td className="py-4 px-4">{user.roles}</td>
-              <td className="py-4 px-4">{user.enabled ? "Oui" : "Non"}</td>
               <td className="py-4 px-4">
-                <button onClick={() => handleEdit(user)} className="bg-yellow-500 text-white px-3 py-1 rounded">Modifier</button>
-                <button onClick={() => setUserToDelete(user)} className="bg-red-600 text-white px-3 py-1 rounded ml-2">Supprimer</button>
+                <span
+                  className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
+                    user.enabled ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                  }`}
+                >
+                  {user.enabled ? "Oui" : "Non"}
+                </span>
+              </td>
+              <td className="py-4 px-4 flex gap-2">
+                <button
+                  onClick={() => handleEdit(user)}
+                  className="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-1 rounded-md transition-colors duration-200"
+                >
+                  Modifier
+                </button>
+                <button
+                  onClick={() => setUserToDelete(user)}
+                  className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md transition-colors duration-200"
+                >
+                  Supprimer
+                </button>
               </td>
             </tr>
           ))}

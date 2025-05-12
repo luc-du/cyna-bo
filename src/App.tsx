@@ -37,9 +37,6 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
 function App() {
   const dispatch: AppDispatch = useDispatch();
   const [authInitialized, setAuthInitialized] = useState(false); 
-  const isAuthenticated = useSelector(
-    (state: RootState) => state.auth.isAuthenticated
-  );
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -53,7 +50,7 @@ function App() {
           localStorage.removeItem("token");
         }
       }
-      setAuthInitialized(true); // Mark initialization as complete
+      setAuthInitialized(true); 
     };
 
     initializeAuth();

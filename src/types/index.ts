@@ -16,6 +16,12 @@ export interface Product {
   status: "active" | "inactive";
   createdAt: string;
   updatedAt: string;
+  images: Array<{
+    id: string;
+    name: string;
+    url: string;
+    uploadDate: string;
+  }>;
 }
 
 export interface Order {

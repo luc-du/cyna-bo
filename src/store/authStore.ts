@@ -94,18 +94,17 @@ export const validateToken = createAsyncThunk(
 export const fetchUserProfile = createAsyncThunk(
   "auth/fetchUserProfile",
   async (_, { rejectWithValue }) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      // Don't log, don't try to decode, just reject
+      return rejectWithValue("Token manquant, veuillez vous reconnecter.");
+    }
     try {
-      const token = localStorage.getItem("token");
-      console.log("Token récupéré (fetchUserProfile):", token);
-      if (!token) {
-        throw new Error("Token non disponible");
-      }
-
       const decodedToken: any = JSON.parse(atob(token.split(".")[1]));
       const userId = decodedToken.jti; 
 
       if (!userId) {
-        throw new Error("User ID non disponible dans le token");
+        return rejectWithValue("User ID non disponible dans le token");
       }
 
       const response = await axios.get(`${USER_API_BASE_URL}/${userId}`, {

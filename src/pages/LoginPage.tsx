@@ -13,6 +13,7 @@ export default function LoginPage() {
   const dispatch = useDispatch<typeof store.dispatch>();
   const { loading } = useSelector((state: RootState) => state.auth);
   const [isSignup, setIsSignup] = useState(false);
+  const  [showAdminValidationMessage, setShowAdminValidationMessage] = useState(false);
   const [formData, setFormData] = useState({
     firstname: "",
     lastname: "",
@@ -34,7 +35,10 @@ export default function LoginPage() {
             password: formData.password,
           })
         ).unwrap();
-        toast.success("Inscription réussie");
+        toast.success(
+          "Inscription réussie ! Notre administrateur doit vérifier votre compte, vérifiez votre boîte mail pour plus d'informations.",
+          { duration: 8000 } 
+        );
       } else {
         await dispatch(
           loginUser({ email: formData.email, password: formData.password })

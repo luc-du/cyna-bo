@@ -1,13 +1,24 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
 import { Bell, Lock, User, X } from "lucide-react";
+
+const USER_API_BASE_URL = "/api/v1/user";
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("No token found");
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+};
 
 export default function Settings() {
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     profile: {
-      name: "Admin User",
-      email: "admin@example.com",
-      bio: "Product manager with 5+ years of experience.",
+      firstname: "",
+      lastname: "",
+      email: "",
+      profile: "",
     },
     security: {
       currentPassword: "",
@@ -20,6 +31,39 @@ export default function Settings() {
       sms: true,
     },
   });
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const response = await axios.get(`${USER_API_BASE_URL}/me`, {
+          headers: getAuthHeaders(),
+        });
+        const user = response.data;
+        setFormData({
+          profile: {
+            firstname: user.firstname,
+            lastname: user.lastname,
+            email: user.email,
+            profile: user.profile,
+          },
+          security: {
+            currentPassword: "",
+            newPassword: "",
+            confirmPassword: "",
+          },
+          notifications: {
+            email: true, // Default values, adjust based on API response if available
+            push: false,
+            sms: true,
+          },
+        });
+      } catch (error) {
+        console.error("Erreur lors de la récupération des données utilisateur :", error);
+      }
+    };
+
+    fetchUserData();
+  }, []);
 
   const sections = [
     {
@@ -43,8 +87,33 @@ export default function Settings() {
     },
   ];
 
-  const handleSave = (section: string) => {
-    setEditingSection(null);
+  const handleSave = async (section: string) => {
+    try {
+      if (section === "profile") {
+        await axios.patch(
+          `${USER_API_BASE_URL}/me`,
+          {
+            firstname: formData.profile.firstname,
+            lastname: formData.profile.lastname,
+            email: formData.profile.email,
+            profile: formData.profile.profile,
+          },
+          { headers: getAuthHeaders() }
+        );
+      } else if (section === "security") {
+        await axios.patch(
+          `${USER_API_BASE_URL}/me/password`,
+          {
+            currentPassword: formData.security.currentPassword,
+            newPassword: formData.security.newPassword,
+          },
+          { headers: getAuthHeaders() }
+        );
+      }
+      setEditingSection(null);
+    } catch (error) {
+      console.error("Erreur lors de la mise à jour des données utilisateur :", error);
+    }
   };
 
   const renderEditForm = (section: string) => {
@@ -53,25 +122,35 @@ export default function Settings() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Name
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Prénom</label>
               <input
                 type="text"
-                value={formData.profile.name}
+                value={formData.profile.firstname}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    profile: { ...formData.profile, name: e.target.value },
+                    profile: { ...formData.profile, firstname: e.target.value },
                   })
                 }
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Email
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Nom</label>
+              <input
+                type="text"
+                value={formData.profile.lastname}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    profile: { ...formData.profile, lastname: e.target.value },
+                  })
+                }
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Email</label>
               <input
                 type="email"
                 value={formData.profile.email}
@@ -85,15 +164,13 @@ export default function Settings() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Bio
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Profil</label>
               <textarea
-                value={formData.profile.bio}
+                value={formData.profile.profile}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    profile: { ...formData.profile, bio: e.target.value },
+                    profile: { ...formData.profile, profile: e.target.value },
                   })
                 }
                 rows={3}
@@ -107,9 +184,7 @@ export default function Settings() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Mot de passe actuel
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Mot de passe actuel</label>
               <input
                 type="password"
                 value={formData.security.currentPassword}
@@ -126,9 +201,7 @@ export default function Settings() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Nouveau mot de passe
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Nouveau mot de passe</label>
               <input
                 type="password"
                 value={formData.security.newPassword}
@@ -145,9 +218,7 @@ export default function Settings() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Confirmer le nouveau mot de passe
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Confirmer le nouveau mot de passe</label>
               <input
                 type="password"
                 value={formData.security.confirmPassword}

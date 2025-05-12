@@ -66,7 +66,7 @@ export const updateUser = createAsyncThunk(
 
 export const deleteUser = createAsyncThunk("users/deleteUser", async (id: number, { rejectWithValue }) => {
   try {
-    const headers = getAuthHeaders(); // peut throw
+    const headers = getAuthHeaders(); 
     await axios.delete(`${USER_API_BASE_URL}/${id}`, { headers });
     return id;
   } catch (error: any) {

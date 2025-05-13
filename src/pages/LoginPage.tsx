@@ -13,7 +13,6 @@ export default function LoginPage() {
   const dispatch = useDispatch<typeof store.dispatch>();
   const { loading } = useSelector((state: RootState) => state.auth);
   const [isSignup, setIsSignup] = useState(false);
-  const  [showAdminValidationMessage, setShowAdminValidationMessage] = useState(false);
   const [formData, setFormData] = useState({
     firstname: "",
     lastname: "",

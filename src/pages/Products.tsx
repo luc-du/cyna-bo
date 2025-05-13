@@ -44,6 +44,7 @@ export default function Products() {
     categoryId: "",
     status: "AVAILABLE",
     images: [] as File[],
+    existingImages: [] as any[], // Ajout pour stocker les images déjà uploadées
     promo: false,
   });
   const [createForm, setCreateForm] = useState({
@@ -148,6 +149,7 @@ export default function Products() {
           categoryId: product.categoryId ? product.categoryId.toString() : "",
           status: product.status,
           images: [],
+          existingImages: product.images || [], // On conserve les images existantes
           promo: !!product.promo,
         });
         setEditingProduct(productId);
@@ -179,6 +181,14 @@ export default function Products() {
     formData.append("status", editForm.status);
     formData.append("promo", String(editForm.promo));
     formData.append("skipStripeOnError", "true");
+
+    // Ajout des IDs des images existantes (pour ne pas les perdre)
+    if (editForm.existingImages && editForm.existingImages.length > 0) {
+      const ids = editForm.existingImages.map((img: any) => img.id);
+      ids.forEach((id: number) => {
+        formData.append("existingImageIds", String(id));
+      });
+    }
 
     // N'ajouter le champ images que si des nouvelles images sont sélectionnées
     if (editForm.images && editForm.images.length > 0) {
@@ -584,25 +594,25 @@ export default function Products() {
             <div className="col-span-2 space-y-1 mt-6">
               <label className="block text-sm font-medium text-gray-700">Images existantes</label>
               <div className="grid grid-cols-2 gap-4">
-                {(() => {
-                  const product = products.find((p: any) => Number(p.id) === editingProduct);
-                  if (product && product.images && product.images.length > 0) {
-                    return product.images.map((image: any, idx: number) => (
-                      <div key={idx} className="relative group">
-                        <img
-                          src={`${IMAGE_BASE_URL}${image.url}`}
-                          alt={`Produit ${idx + 1}`}
-                          className="w-full h-32 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
-                          onClick={e => {
-                            e.stopPropagation();
-                            setPreviewImage(`${IMAGE_BASE_URL}${image.url}`);
-                          }}
-                        />
-                      </div>
-                    ));
-                  }
-                  return <div className="col-span-2 text-gray-400">Aucune image existante</div>;
-                })()}
+                {editForm.existingImages && editForm.existingImages.length > 0 ? (
+                  editForm.existingImages.map((image: any, idx: number) => (
+                    <div key={idx} className="relative group">
+                      <img
+                        src={`${IMAGE_BASE_URL}${image.url}`}
+                        alt={`Produit ${idx + 1}`}
+                        className="w-full h-32 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
+                        onClick={e => {
+                          e.stopPropagation();
+                          setPreviewImage(`${IMAGE_BASE_URL}${image.url}`);
+                        }}
+                      />
+                      {/* Optionnel : bouton pour supprimer l'image existante */}
+                      {/* <button onClick={() => handleRemoveExistingImage(idx)} className="absolute top-2 right-2 bg-black bg-opacity-50 text-white rounded-full p-1">&times;</button> */}
+                    </div>
+                  ))
+                ) : (
+                  <div className="col-span-2 text-gray-400">Aucune image existante</div>
+                )}
               </div>
             </div>
           </div>
@@ -676,7 +686,7 @@ export default function Products() {
                 <div className="p-8 text-center">
                   <div className="inline-flex rounded-full bg-gray-100 p-4 mb-4">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                   </div>
                   <h3 className="text-lg font-medium text-gray-900">Aucun produit trouvé</h3>

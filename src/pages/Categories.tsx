@@ -107,6 +107,9 @@ export default function Categories() {
     if (!sortConfig) return 0;
     const { key, direction } = sortConfig;
     const order = direction === "asc" ? 1 : -1;
+    if (key === "products") {
+      return ((a.products?.length || 0) - (b.products?.length || 0)) * order;
+    }
     return ((a[key as keyof typeof a] ?? "") > (b[key as keyof typeof b] ?? "") ? order : -order) as number;
   });
 
@@ -303,31 +306,35 @@ export default function Categories() {
                         className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                       />
                     </th>
-                    <th 
-                      className="py-4 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-150" 
+                    <th
+                      className="py-4 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-150"
                       onClick={() => handleSort("name")}
                     >
                       <div className="flex items-center space-x-1">
                         <span>Nom</span>
                         {sortConfig?.key === "name" && (
-                          <span className="text-indigo-600">
-                            {sortConfig.direction === "asc" ? " ↑" : " ↓"}
-                          </span>
+                          <span className="text-indigo-600">{sortConfig.direction === "asc" ? " ↑" : " ↓"}</span>
                         )}
                       </div>
                     </th>
-                    <th className="py-4 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Nombre de produits
+                    <th
+                      className="py-4 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-150"
+                      onClick={() => handleSort("products")}
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>Nombre de produits</span>
+                        {sortConfig?.key === "products" && (
+                          <span className="text-indigo-600">{sortConfig.direction === "asc" ? " ↑" : " ↓"}</span>
+                        )}
+                      </div>
                     </th>
-                    <th className="py-4 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
+                    <th className="py-4 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {paginatedCategories.map((category) => (
-                    <tr 
-                      key={category.id} 
+                    <tr
+                      key={category.id}
                       className="hover:bg-gray-50 cursor-pointer transition-colors duration-150"
                       onClick={() => handleViewDetails(category)}
                     >
@@ -345,14 +352,20 @@ export default function Categories() {
                             <img
                               src={`http://localhost:8082${category.images[0].url}`}
                               alt={category.name}
-                              className="h-10 w-10 rounded-lg object-cover mr-3 cursor-pointer"
+                              className="h-10 w-10 rounded-lg object-cover mr-3 cursor-pointer bg-gray-200"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setPreviewImage && setPreviewImage(`http://localhost:8082${category.images[0].url}`);
                               }}
+                              onError={e => {
+                                const img = e.target as HTMLImageElement;
+                                img.style.display = "none";
+                                const fallback = img.nextElementSibling as HTMLElement;
+                                if (fallback) fallback.style.display = "flex";
+                              }}
                             />
                           ) : (
-                            <div className="h-10 w-10 rounded-lg bg-gray-200 flex items-center justify-center mr-3">
+                            <div style={{ display: "flex" }} className="h-10 w-10 rounded-lg bg-gray-200 items-center justify-center mr-3">
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                               </svg>
@@ -365,7 +378,7 @@ export default function Categories() {
                         </div>
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-500">
-                        <span className="font-medium">{category.products.length|| 0}</span> produits
+                        <span className="font-medium">{category.products.length || 0}</span> produits
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-500" onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-2">
@@ -394,24 +407,35 @@ export default function Categories() {
                 </tbody>
               </table>
               {totalPages > 1 && (
-                <div className="flex justify-center items-center gap-2 mt-4">
-                  <button
-                    className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  >
-                    Précédent
-                  </button>
-                  <span>
-                    Page {currentPage} sur {totalPages}
-                  </span>
-                  <button
-                    className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  >
-                    Suivant
-                  </button>
+                <div className="flex flex-col items-center gap-2 mt-4">
+                  <div className="flex gap-2">
+                    <button
+                      className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    >
+                      Précédent
+                    </button>
+                    {Array.from({ length: totalPages }).map((_, i) => {
+                      const page = i + 1;
+                      return (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`px-3 py-1 rounded transition-colors duration-200 ${currentPage === page ? "bg-indigo-600 text-white" : "bg-gray-200 hover:bg-gray-300"}`}
+                        >
+                          {page}
+                        </button>
+                      );
+                    })}
+                    <button
+                      className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    >
+                      Suivant
+                    </button>
+                  </div>
                 </div>
               )}
               {categories.length === 0 && !loading && (

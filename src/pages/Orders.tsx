@@ -51,15 +51,15 @@ export default function Orders() {
   };
 
   const handleCancelSubscription = async (customerId: string) => {
-    if (window.confirm("Êtes-vous sûr de vouloir annuler cet abonnement ?")) {
+    if (window.confirm("Êtes-vous sûr de vouloir annuler cette commande ?")) {
       try {
         await dispatch(cancelSubscription(customerId)).unwrap();
-        alert("Abonnement annulé avec succès");
+        alert("Commande annulée avec succès");
         // Refresh orders list
         dispatch(fetchOrders());
       } catch (error) {
         console.error("Error cancelling subscription:", error);
-        alert("Erreur lors de l'annulation de l'abonnement");
+        alert("Erreur lors de l'annulation de la commande");
       }
     }
   };
@@ -175,7 +175,7 @@ export default function Orders() {
             type="text"
             value={search}
             onChange={handleSearch}
-            placeholder="Rechercher un abonnement..."
+            placeholder="Rechercher une commande..."
             className="w-full rounded-lg border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 pl-10 py-3 text-sm"
           />
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -263,7 +263,7 @@ export default function Orders() {
                     }}
                     className="w-full inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 sm:text-sm"
                   >
-                    Annuler l'abonnement
+                    Annuler la commande
                   </button>
                 )}
               </div>
@@ -388,9 +388,9 @@ export default function Orders() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-1">Aucun abonnement trouvé</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-1">Aucunes commandes trouvées</h3>
                   <p className="text-gray-500">
-                    {search ? "Aucun résultat ne correspond à votre recherche" : "Il n'y a pas encore d'abonnements"}
+                    {search ? "Aucun résultat ne correspond à votre recherche" : "Il n'y a pas encore de commandes"}
                   </p>
                 </div>
               )}

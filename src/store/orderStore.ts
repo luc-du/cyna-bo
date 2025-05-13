@@ -21,10 +21,10 @@ export interface Order {
   status: string;
   quantity: number;
   amount: number;
-  paymentMethod: string;
   createdAt: string;
   updatedAt: string;
   productName?: string; // Derived field
+  paymentMethod?: string;
 }
 
 // Fetch all orders

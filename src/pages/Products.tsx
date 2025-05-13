@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, Suspense, lazy } from "react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import {
   deleteProduct,
@@ -11,17 +11,29 @@ import {
 } from "../store/productStore";
 import { X } from "lucide-react";
 import { fetchCategories } from "../store/categoryStore";
+import ProductForm from "../components/ProductForm";
+import Loader from "../components/Loader";
+import ProductTable from "../components/ProductTable";
+
+const IMAGE_BASE_URL = import.meta.env.VITE_IMAGE_BASE_URL || "http://localhost:8082";
+
+const LazyProductDetailModal = lazy(() => import("../components/ProductDetailModal"));
 
 export default function Products() {
   const dispatch = useAppDispatch();
-  const { products, loading } = useAppSelector((state: { products: any }) => state.products);
-  const { categories } = useAppSelector((state: { categories: any }) => state.categories);
+
+  // Sélecteurs Redux sans typage strict pour éviter les erreurs
+  const productsState = useAppSelector((state: any) => state.products);
+  const products = productsState.products;
+  const loading = productsState.loading;
+  const categoriesState = useAppSelector((state: any) => state.categories);
+  const categories = categoriesState.categories;
 
   const [search, setSearch] = useState("");
   const [searchTimeout, setSearchTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [editingProduct, setEditingProduct] = useState<number | null>(null);
   const [creatingProduct, setCreatingProduct] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({
     name: "",
     brand: "",
@@ -32,6 +44,7 @@ export default function Products() {
     categoryId: "",
     status: "AVAILABLE",
     images: [] as File[],
+    promo: false,
   });
   const [createForm, setCreateForm] = useState({
     name: "",
@@ -43,7 +56,12 @@ export default function Products() {
     categoryId: "",
     status: "AVAILABLE",
     images: [] as File[],
+    promo: false,
   });
+
+  // Validation error states
+  const [createErrors, setCreateErrors] = useState<{ [key: string]: string }>({});
+  const [editErrors, setEditErrors] = useState<{ [key: string]: string }>({});
 
   const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
@@ -51,10 +69,34 @@ export default function Products() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // Notification state
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Function to show notification
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message });
+    setTimeout(() => setNotification(null), 4000);
+  };
+
+  const createModalRef = useRef<HTMLDivElement>(null);
+  const editModalRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     dispatch(fetchProducts());
     dispatch(fetchCategories());
   }, [dispatch]);
+
+  useEffect(() => {
+    if (creatingProduct && createModalRef.current) {
+      createModalRef.current.focus();
+    }
+  }, [creatingProduct]);
+
+  useEffect(() => {
+    if (editingProduct !== null && editModalRef.current) {
+      editModalRef.current.focus();
+    }
+  }, [editingProduct]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -78,35 +120,52 @@ export default function Products() {
     setSearchTimeout(timeout);
   };
 
+  const validateForm = (form: typeof createForm | typeof editForm) => {
+    const errors: { [key: string]: string } = {};
+    if (!form.name.trim()) errors.name = "Le nom est requis.";
+    if (!form.brand.trim()) errors.brand = "La marque est requise.";
+    if (!form.description.trim()) errors.description = "La description est requise.";
+    if (!form.caracteristics.trim()) errors.caracteristics = "Les caractéristiques sont requises.";
+    if (!form.amount || isNaN(Number(form.amount)) || Number(form.amount) <= 0) errors.amount = "Veuillez entrer un prix valide.";
+    if (!form.categoryId) errors.categoryId = "Veuillez sélectionner une catégorie.";
+    if (!form.status) errors.status = "Veuillez sélectionner un statut.";
+    return errors;
+  };
+
   const handleEdit = (productId: number) => {
-    const product = products.find((p: { id: number }) => p.id === productId);
-    if (product) {
-      setEditForm({
-        name: product.name,
-        brand: product.brand,
-        description: product.description,
-        caracteristics: product.caracteristics,
-        pricingModel: product.pricingModel,
-        amount: product.amount.toString(),
-        categoryId: product.categoryId ? product.categoryId.toString() : "",
-        status: product.status,
-        images: [],
-      });
-      setEditingProduct(productId);
-    }
+    // Always fetch product details to refresh images and data
+    dispatch(fetchProductDetails(productId)).then((action: any) => {
+      // Use the payload from fetchProductDetails to get the latest product data
+      const product = action.payload;
+      if (product) {
+        setEditForm({
+          name: product.name,
+          brand: product.brand,
+          description: product.description,
+          caracteristics: product.caracteristics,
+          pricingModel: product.pricingModel,
+          amount: product.amount.toString(),
+          categoryId: product.categoryId ? product.categoryId.toString() : "",
+          status: product.status,
+          images: [],
+          promo: !!product.promo,
+        });
+        setEditingProduct(productId);
+      }
+    });
   };
 
   const handleSave = async () => {
     if (!editingProduct) {
-      console.error("Impossible de sauvegarder : aucun produit sélectionné !");
+      showNotification('error', "Impossible de sauvegarder : aucun produit sélectionné !");
       return;
     }
 
-    if (isNaN(Number(editForm.amount)) || Number(editForm.amount) <= 0) {
-      alert("Veuillez entrer un prix valide.");
-      return;
-    }
+    const errors = validateForm(editForm);
+    setEditErrors(errors);
+    if (Object.keys(errors).length > 0) return;
 
+    // Create form data for submission
     const formData = new FormData();
     formData.append("name", editForm.name);
     formData.append("brand", editForm.brand);
@@ -118,11 +177,15 @@ export default function Products() {
       formData.append("categoryId", editForm.categoryId);
     }
     formData.append("status", editForm.status);
+    formData.append("promo", String(editForm.promo));
     formData.append("skipStripeOnError", "true");
 
-    editForm.images.forEach((file) => {
-      formData.append("images", file);
-    });
+    // N'ajouter le champ images que si des nouvelles images sont sélectionnées
+    if (editForm.images && editForm.images.length > 0) {
+      editForm.images.forEach((file) => {
+        formData.append("images", file);
+      });
+    }
 
     try {
       const result = await dispatch(updateProduct({ id: editingProduct, data: formData }));
@@ -131,18 +194,19 @@ export default function Products() {
         if ('message' in result.payload) {
           if (String(result.payload.message).includes('Stripe') || 
               String(result.payload.message).includes('already exists')) {
-            console.warn("Product updated but had Stripe integration issues:", result.payload.message);
-            alert("Le produit a été mis à jour mais l'intégration Stripe a rencontré un problème. " +
-                  "Cela n'affecte pas les données du produit dans votre catalogue.");
+            showNotification('success', "Le produit a été mis à jour mais l'intégration Stripe a rencontré un problème. Cela n'affecte pas les données du produit dans votre catalogue.");
           }
         }
       }
       
+      await dispatch(fetchProductDetails(editingProduct));
+      await dispatch(fetchProducts());
       setEditingProduct(null);
-      dispatch(fetchProducts());
+      setCurrentPage(1);
+      showNotification('success', 'Produit modifié avec succès.');
     } catch (err) {
-      alert("Erreur lors de la mise à jour du produit");
-      console.error(err);
+      showNotification('error', "Erreur lors de la mise à jour du produit");
+      console.error("Update error:", err);
     }
   };
 
@@ -152,7 +216,7 @@ export default function Products() {
       return categoryOrId.name;
     }
     const catId = typeof categoryOrId === "object" ? categoryOrId.id : categoryOrId;
-    const found = categories?.find((c: any) => String(c.id) === String(catId));
+    const found = categories?.find((c: { id: number }) => String(c.id) === String(catId));
     return found ? found.name : "Catégorie inconnue";
   };
 
@@ -170,15 +234,9 @@ export default function Products() {
   };
 
   const handleCreate = async () => {
-    if (!createForm.categoryId) {
-      alert("Veuillez sélectionner une catégorie");
-      return;
-    }
-
-    if (isNaN(Number(createForm.amount)) || Number(createForm.amount) <= 0) {
-      alert("Veuillez entrer un prix valide.");
-      return;
-    }
+    const errors = validateForm(createForm);
+    setCreateErrors(errors);
+    if (Object.keys(errors).length > 0) return;
 
     const formData = new FormData();
     formData.append("name", createForm.name);
@@ -189,6 +247,7 @@ export default function Products() {
     formData.append("amount", createForm.amount);
     formData.append("categoryId", createForm.categoryId);
     formData.append("status", createForm.status);
+    formData.append("promo", String(createForm.promo));
     formData.append("skipStripeOnError", "true");
     createForm.images.forEach((file) => {
       formData.append("images", file);
@@ -201,9 +260,7 @@ export default function Products() {
         if ('message' in result.payload) {
           if (String(result.payload.message).includes('Stripe') || 
               String(result.payload.message).includes('already exists')) {
-            console.warn("Product created but had Stripe integration issues:", result.payload.message);
-            alert("Le produit a été créé mais l'intégration Stripe a signalé que le produit existe déjà. " +
-                  "Ceci est probablement dû à une tentative précédente. Le produit a été enregistré correctement.");
+            showNotification('success', "Le produit a été créé mais l'intégration Stripe a signalé que le produit existe déjà. Ceci est probablement dû à une tentative précédente. Le produit a été enregistré correctement.");
           }
         }
       }
@@ -218,14 +275,25 @@ export default function Products() {
         categoryId: "",
         status: "AVAILABLE",
         images: [],
+        promo: false,
       });
+      await dispatch(fetchProducts());
       setCreatingProduct(false);
-      dispatch(fetchProducts());
+      setCurrentPage(1);
+      showNotification('success', 'Produit créé avec succès.');
     } catch (err) {
       console.error("Product creation error:", err);
-      alert("Erreur lors de la création du produit. Veuillez réessayer.");
+      showNotification('error', "Erreur lors de la création du produit. Veuillez réessayer.");
     }
   };
+
+  // Reset errors when opening/closing modals
+  useEffect(() => {
+    if (!creatingProduct) setCreateErrors({});
+  }, [creatingProduct]);
+  useEffect(() => {
+    if (editingProduct === null) setEditErrors({});
+  }, [editingProduct]);
 
   const handleSelectProduct = (productId: number) => {
     setSelectedProducts((prev) =>
@@ -237,7 +305,7 @@ export default function Products() {
     if (selectedProducts.length === products.length) {
       setSelectedProducts([]);
     } else {
-      setSelectedProducts(products.map((product: any) => product.id));
+      setSelectedProducts(products.map((product: any) => Number(product.id)));
     }
   };
 
@@ -250,8 +318,8 @@ export default function Products() {
   };
 
   const handleViewDetails = (product: any) => {
-    dispatch(fetchProductDetails(product.id));
-    setSelectedProduct(product);
+    setSelectedProductId(Number(product.id));
+    dispatch(fetchProductDetails(Number(product.id)));
   };
 
   const handleBulkDelete = () => {
@@ -289,13 +357,30 @@ export default function Products() {
     }
   };
 
-  // Add safeguards to prevent errors if products isn't iterable
   const sortedProducts = Array.isArray(products) 
     ? [...products].sort((a, b) => {
         if (!sortConfig) return 0;
         const { key, direction } = sortConfig;
         const order = direction === "asc" ? 1 : -1;
-        return a[key] > b[key] ? order : -order;
+
+        // Numeric sort for amount
+        if (key === "amount") {
+          return (Number(a.amount) - Number(b.amount)) * order;
+        }
+        // Boolean sort for promo
+        if (key === "promo") {
+          return (Number(a.promo) - Number(b.promo)) * order;
+        }
+        // Sort by category name
+        if (key === "categoryId") {
+          const aCat = getCategoryName(a.category || a.categoryId);
+          const bCat = getCategoryName(b.category || b.categoryId);
+          return aCat.localeCompare(bCat, "fr", { sensitivity: "base" }) * order;
+        }
+        // Alphabetical sort (case-insensitive) for name, brand, status, etc.
+        const aValue = (a[key] ?? "").toString().toLowerCase();
+        const bValue = (b[key] ?? "").toString().toLowerCase();
+        return aValue.localeCompare(bValue, "fr", { sensitivity: "base" }) * order;
       })
     : [];
 
@@ -311,16 +396,24 @@ export default function Products() {
         <div className="sm:flex-auto">
           <h1 className="text-2xl font-semibold text-gray-900">Produits</h1>
           <p className="mt-2 text-sm text-gray-500">
-            Une liste de tous les produits de votre compte.
+            Liste des produits actuellement sur Cyna IT.
           </p>
         </div>
-        <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
+        <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none flex gap-2">
           <button
             type="button"
             onClick={() => setCreatingProduct(true)}
             className="inline-flex items-center justify-center rounded-md border border-transparent bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:w-auto transition-all duration-200"
           >
             Ajouter un produit
+          </button>
+          <button
+            type="button"
+            onClick={() => dispatch(fetchProducts())}
+            className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:w-auto transition-all duration-200"
+            title="Rafraîchir la liste des produits"
+          >
+            Rafraîchir
           </button>
         </div>
       </div>
@@ -395,120 +488,32 @@ export default function Products() {
       )}
 
       {/* Product Card Modal */}
-      {selectedProduct && (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-[1000] transition-all duration-300">
-          <div className="bg-white rounded-2xl p-6 max-w-4xl w-full shadow-xl transform transition-all duration-300 animate-fadeIn">
-            <div className="flex justify-between items-center mb-6 border-b pb-4">
-              <h3 className="text-xl font-semibold text-gray-800">{selectedProduct.name}</h3>
-              <button
-                onClick={() => setSelectedProduct(null)}
-                className="text-gray-400 hover:text-gray-600 transition-colors duration-200"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-4">
-                <div className="flex items-center">
-                  <span className="text-gray-500 w-32">Marque:</span>
-                  <span className="font-medium">{selectedProduct.brand}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Description:</span>
-                  <p className="mt-1 text-gray-800">{selectedProduct.description}</p>
-                </div>
-                <div>
-                  <span className="text-gray-500">Caractéristiques:</span>
-                  <p className="mt-1 text-gray-800">{selectedProduct.caracteristics}</p>
-                </div>
-                <div className="flex items-center">
-                  <span className="text-gray-500 w-32">Prix:</span>
-                  <span className="font-medium text-indigo-600">{selectedProduct.amount} €</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="text-gray-500 w-32">Statut:</span>
-                  <span 
-                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                      selectedProduct.status === "AVAILABLE"
-                        ? "bg-green-100 text-green-800"
-                        : selectedProduct.status === "OUT_OF_STOCK"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-red-100 text-red-800"
-                    }`}
-                  >
-                    {translateStatus(selectedProduct.status)}
-                  </span>
-                </div>
-                <div className="flex items-center">
-                  <span className="text-gray-500 w-32">Catégorie:</span>
-                  <span className="font-medium">
-                    {getCategoryName(selectedProduct.category)}
-                  </span>
-                </div>
-              </div>
-              <div>
-                <h4 className="font-semibold text-gray-800 mb-4">Images</h4>
-                {selectedProduct.images && selectedProduct.images.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-4">
-                    {selectedProduct.images.map((image: any, index: number) => (
-                      <div key={index} className="relative group">
-                        <img
-                          src={`http://localhost:8082${image.url}`}
-                          alt={`Produit ${index + 1}`}
-                          className="w-full h-40 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setPreviewImage(`http://localhost:8082${image.url}`);
-                          }}
-                        />
-                        <div 
-                          className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all duration-200"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setPreviewImage(`http://localhost:8082${image.url}`);
-                          }}
-                        ></div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center h-40 bg-gray-100 rounded-lg">
-                    <p className="text-gray-400">Aucune image disponible</p>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="mt-8 flex justify-end">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedProduct(null);
+      {selectedProductId && (
+        (() => {
+          const selectedProduct = products.find((p: any) => p.id === selectedProductId);
+          return selectedProduct && (
+            <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-[1000]"><Loader /></div>}>
+              <LazyProductDetailModal
+                product={selectedProduct}
+                categories={categories}
+                onClose={() => {
+                  setSelectedProductId(null);
+                  dispatch(fetchProducts());
                 }}
-                className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200 mr-3"
-              >
-                Fermer
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedProduct(null);
-                  handleEdit(selectedProduct.id);
-                }}
-                className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200"
-              >
-                Modifier
-              </button>
-            </div>
-          </div>
-        </div>
+                setPreviewImage={setPreviewImage}
+                getCategoryName={getCategoryName}
+                translateStatus={translateStatus}
+                IMAGE_BASE_URL={IMAGE_BASE_URL}
+              />
+            </Suspense>
+          );
+        })()
       )}
 
       {/* Create Modal */}
       {creatingProduct && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 transition-all duration-300">
-          <div className="bg-white rounded-2xl p-6 max-w-4xl w-full shadow-xl transform transition-all duration-300 animate-fadeIn overflow-y-auto max-h-[90vh]">
+          <div className="bg-white rounded-2xl p-6 max-w-4xl w-full shadow-xl transform transition-all duration-300 animate-fadeIn overflow-y-auto max-h-[90vh]" ref={createModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Créer un produit">
             <div className="flex justify-between items-center mb-6 border-b pb-4">
               <h3 className="text-xl font-semibold text-gray-800">Ajouter un produit</h3>
               <button
@@ -518,189 +523,26 @@ export default function Products() {
                 <X className="h-6 w-6" />
               </button>
             </div>
-            <form
-              onSubmit={(e) => {
+            <ProductForm
+              form={createForm}
+              errors={createErrors}
+              categories={categories || []}
+              mode="create"
+              onChange={(field, value) => {
+                if (field === "cancel") setCreatingProduct(false);
+                else setCreateForm({ ...createForm, [field]: value });
+              }}
+              onImageChange={handleCreateImageChange}
+              onImageRemove={idx => {
+                const newImages = [...createForm.images];
+                newImages.splice(idx, 1);
+                setCreateForm({ ...createForm, images: newImages });
+              }}
+              onSubmit={e => {
                 e.preventDefault();
                 handleCreate();
               }}
-              className="grid grid-cols-1 md:grid-cols-2 gap-6"
-            >
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Nom</label>
-                <input
-                  type="text"
-                  placeholder="Nom du produit"
-                  value={createForm.name}
-                  onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Marque</label>
-                <input
-                  type="text"
-                  placeholder="Marque du produit"
-                  value={createForm.brand}
-                  onChange={(e) => setCreateForm({ ...createForm, brand: e.target.value })}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                />
-              </div>
-              <div className="col-span-2 space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Description</label>
-                <textarea
-                  placeholder="Description détaillée du produit"
-                  value={createForm.description}
-                  onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                  rows={3}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                />
-              </div>
-              <div className="col-span-2 space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Caractéristiques</label>
-                <textarea
-                  placeholder="Caractéristiques techniques du produit"
-                  value={createForm.caracteristics}
-                  onChange={(e) => setCreateForm({ ...createForm, caracteristics: e.target.value })}
-                  rows={3}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Modèle de tarification</label>
-                <select
-                  value={createForm.pricingModel}
-                  onChange={(e) => setCreateForm({ ...createForm, pricingModel: e.target.value })}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                >
-                  <option value="PER_MONTH_PER_USER">Par mois / utilisateur</option>
-                  <option value="PER_YEAR_PER_USER">Par an / utilisateur</option>
-                  <option value="PER_MONTH_PER_DEVICE">Par mois / appareil</option>
-                  <option value="PER_YEAR_PER_DEVICE">Par an / appareil</option>
-                  <option value="PAY_AS_YOU_GO">Payer en une fois</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Prix</label>
-                <div className="mt-1 relative rounded-lg shadow-sm">
-                  <input
-                    type="number"
-                    placeholder="Prix"
-                    value={createForm.amount}
-                    onChange={(e) => setCreateForm({ ...createForm, amount: e.target.value })}
-                    className="block w-full rounded-lg border-gray-300 pl-7 focus:border-indigo-500 focus:ring-indigo-500"
-                  />
-                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                    <span className="text-gray-500">€</span>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Catégorie</label>
-                <select
-                  value={createForm.categoryId}
-                  onChange={(e) => setCreateForm({ ...createForm, categoryId: e.target.value })}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                >
-                  <option value="">Sélectionner une catégorie</option>
-                  {categories && categories.length > 0 ? (
-                    categories.map((category: { id: number; name: string }) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))
-                  ) : (
-                    <option disabled>Aucune catégorie disponible</option>
-                  )}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Statut</label>
-                <select
-                  value={createForm.status}
-                  onChange={(e) => setCreateForm({ ...createForm, status: e.target.value })}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                >
-                  <option value="AVAILABLE">Disponible</option>
-                  <option value="DISCONTINUED">Arrêté</option>
-                  <option value="OUT_OF_STOCK">Rupture</option>
-                </select>
-              </div>
-              <div className="col-span-2 space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Images</label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg">
-                  <div className="space-y-1 text-center">
-                    <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
-                      <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <div className="flex text-sm text-gray-600">
-                      <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
-                        <span>Télécharger des fichiers</span>
-                        <input 
-                          id="file-upload" 
-                          name="file-upload" 
-                          type="file" 
-                          multiple 
-                          className="sr-only"
-                          onChange={handleCreateImageChange}
-                        />
-                      </label>
-                      <p className="pl-1">ou glisser-déposer</p>
-                    </div>
-                    <p className="text-xs text-gray-500">PNG, JPG, GIF jusqu'à 10MB</p>
-                  </div>
-                </div>
-                {createForm.images.length > 0 && (
-                  <div className="mt-3">
-                    <p className="text-sm font-medium text-gray-700">{createForm.images.length} fichier(s) sélectionné(s)</p>
-                    <div className="mt-2 grid grid-cols-4 gap-2">
-                      {Array.from(createForm.images).map((file, idx) => (
-                        <div key={idx} className="relative group">
-                          <div className="h-20 w-full rounded-lg border border-gray-300 bg-gray-50 flex items-center justify-center overflow-hidden">
-                            {file.type.startsWith("image/") ? (
-                              <img
-                                src={URL.createObjectURL(file)}
-                                alt={file.name}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="text-xs text-gray-500 text-center px-2">
-                                {file.name}
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newImages = [...createForm.images];
-                              newImages.splice(idx, 1);
-                              setCreateForm({ ...createForm, images: newImages });
-                            }}
-                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-sm hover:bg-red-600"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="col-span-2 flex justify-end space-x-3 mt-6 pt-4 border-t">
-                <button
-                  type="button"
-                  onClick={() => setCreatingProduct(false)}
-                  className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200"
-                >
-                  Ajouter le produit
-                </button>
-              </div>
-            </form>
+            />
           </div>
         </div>
       )}
@@ -708,7 +550,7 @@ export default function Products() {
       {/* Edit Modal */}
       {editingProduct !== null && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 transition-all duration-300">
-          <div className="bg-white rounded-2xl p-6 max-w-4xl w-full shadow-xl transform transition-all duration-300 animate-fadeIn overflow-y-auto max-h-[90vh]">
+          <div className="bg-white rounded-2xl p-6 max-w-4xl w-full shadow-xl transform transition-all duration-300 animate-fadeIn overflow-y-auto max-h-[90vh]" ref={editModalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Modifier le produit">
             <div className="flex justify-between items-center mb-6 border-b pb-4">
               <h3 className="text-xl font-semibold text-gray-800">Modifier le produit</h3>
               <button
@@ -718,214 +560,51 @@ export default function Products() {
                 <X className="h-6 w-6" />
               </button>
             </div>
-            <form
-              onSubmit={(e) => {
+            <ProductForm
+              form={editForm}
+              errors={editErrors}
+              categories={categories || []}
+              mode="edit"
+              onChange={(field, value) => {
+                if (field === "cancel") setEditingProduct(null);
+                else setEditForm({ ...editForm, [field]: value });
+              }}
+              onImageChange={handleEditImageChange}
+              onImageRemove={idx => {
+                const newImages = [...editForm.images];
+                newImages.splice(idx, 1);
+                setEditForm({ ...editForm, images: newImages });
+              }}
+              onSubmit={e => {
                 e.preventDefault();
                 handleSave();
               }}
-              className="grid grid-cols-1 md:grid-cols-2 gap-6"
-            >
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Nom</label>
-                <input
-                  type="text"
-                  placeholder="Nom du produit"
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Marque</label>
-                <input
-                  type="text"
-                  placeholder="Marque du produit"
-                  value={editForm.brand}
-                  onChange={(e) => setEditForm({ ...editForm, brand: e.target.value })}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                />
-              </div>
-              <div className="col-span-2 space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Description</label>
-                <textarea
-                  placeholder="Description détaillée du produit"
-                  value={editForm.description}
-                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                  rows={3}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                />
-              </div>
-              <div className="col-span-2 space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Caractéristiques</label>
-                <textarea
-                  placeholder="Caractéristiques techniques du produit"
-                  value={editForm.caracteristics}
-                  onChange={(e) => setEditForm({ ...editForm, caracteristics: e.target.value })}
-                  rows={3}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Modèle de tarification</label>
-                <select
-                  value={editForm.pricingModel}
-                  onChange={(e) => setEditForm({ ...editForm, pricingModel: e.target.value })}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                >
-                  <option value="PER_MONTH_PER_USER">Par mois / utilisateur</option>
-                  <option value="PER_YEAR_PER_USER">Par an / utilisateur</option>
-                  <option value="PER_MONTH_PER_DEVICE">Par mois / appareil</option>
-                  <option value="PER_YEAR_PER_DEVICE">Par an / appareil</option>
-                  <option value="PAY_AS_YOU_GO">Payer en une fois</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Prix</label>
-                <div className="mt-1 relative rounded-lg shadow-sm">
-                  <input
-                    type="number"
-                    placeholder="Prix"
-                    value={editForm.amount}
-                    onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
-                    className="block w-full rounded-lg border-gray-300 pl-7 focus:border-indigo-500 focus:ring-indigo-500"
-                  />
-                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                    <span className="text-gray-500">€</span>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Catégorie</label>
-                <select
-                  value={editForm.categoryId}
-                  onChange={(e) => setEditForm({ ...editForm, categoryId: e.target.value })}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                >
-                  <option value="">Sélectionner une catégorie</option>
-                  {categories && categories.length > 0 ? (
-                    categories.map((category: { id: number; name: string }) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))
-                  ) : (
-                    <option disabled>Aucune catégorie disponible</option>
-                  )}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Statut</label>
-                <select
-                  value={editForm.status}
-                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                >
-                  <option value="AVAILABLE">Disponible</option>
-                  <option value="DISCONTINUED">Arrêté</option>
-                  <option value="OUT_OF_STOCK">Rupture</option>
-                </select>
-              </div>
-              <div className="col-span-2 space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Images existantes</label>
-                <div className="grid grid-cols-2 gap-4">
-                  {(() => {
-                    const product = products.find((p: any) => p.id === editingProduct);
-                    if (product && product.images && product.images.length > 0) {
-                      return product.images.map((image: any, idx: number) => (
-                        <div key={idx} className="relative group">
-                          <img
-                            src={`http://localhost:8082${image.url}`}
-                            alt={`Produit ${idx + 1}`}
-                            className="w-full h-32 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
-                            onClick={e => {
-                              e.stopPropagation();
-                              setPreviewImage(`http://localhost:8082${image.url}`);
-                            }}
-                          />
-                          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all duration-200"></div>
-                        </div>
-                      ));
-                    }
-                    return <div className="col-span-2 text-gray-400">Aucune image existante</div>;
-                  })()}
-                </div>
-              </div>
-              <div className="col-span-2 space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Ajouter de nouvelles images</label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg">
-                  <div className="space-y-1 text-center">
-                    <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
-                      <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <div className="flex text-sm text-gray-600">
-                      <label htmlFor="file-upload-edit" className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
-                        <span>Télécharger des fichiers</span>
-                        <input 
-                          id="file-upload-edit" 
-                          name="file-upload-edit" 
-                          type="file" 
-                          multiple 
-                          className="sr-only"
-                          onChange={handleEditImageChange}
+            />
+            {/* Images existantes */}
+            <div className="col-span-2 space-y-1 mt-6">
+              <label className="block text-sm font-medium text-gray-700">Images existantes</label>
+              <div className="grid grid-cols-2 gap-4">
+                {(() => {
+                  const product = products.find((p: any) => Number(p.id) === editingProduct);
+                  if (product && product.images && product.images.length > 0) {
+                    return product.images.map((image: any, idx: number) => (
+                      <div key={idx} className="relative group">
+                        <img
+                          src={`${IMAGE_BASE_URL}${image.url}`}
+                          alt={`Produit ${idx + 1}`}
+                          className="w-full h-32 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
+                          onClick={e => {
+                            e.stopPropagation();
+                            setPreviewImage(`${IMAGE_BASE_URL}${image.url}`);
+                          }}
                         />
-                      </label>
-                      <p className="pl-1">ou glisser-déposer</p>
-                    </div>
-                    <p className="text-xs text-gray-500">PNG, JPG, GIF jusqu'à 10MB</p>
-                  </div>
-                </div>
-                {editForm.images.length > 0 && (
-                  <div className="mt-3">
-                    <p className="text-sm font-medium text-gray-700">{editForm.images.length} fichier(s) sélectionné(s)</p>
-                    <div className="mt-2 grid grid-cols-4 gap-2">
-                      {Array.from(editForm.images).map((file, idx) => (
-                        <div key={idx} className="relative group">
-                          <div className="h-20 w-full rounded-lg border border-gray-300 bg-gray-50 flex items-center justify-center overflow-hidden">
-                            {file.type.startsWith("image/") ? (
-                              <img
-                                src={URL.createObjectURL(file)}
-                                alt={file.name}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="text-xs text-gray-500 text-center px-2">
-                                {file.name}
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newImages = [...editForm.images];
-                              newImages.splice(idx, 1);
-                              setEditForm({ ...editForm, images: newImages });
-                            }}
-                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-sm hover:bg-red-600"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      </div>
+                    ));
+                  }
+                  return <div className="col-span-2 text-gray-400">Aucune image existante</div>;
+                })()}
               </div>
-              <div className="col-span-2 flex justify-end space-x-3 mt-6 pt-4 border-t">
-                <button
-                  type="button"
-                  onClick={() => setEditingProduct(null)}
-                  className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200"
-                >
-                  Sauvegarder les modifications
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
@@ -935,179 +614,62 @@ export default function Products() {
         <div className="-my-2 -mx-4 overflow-x-auto sm:-mx-6 lg:-mx-8">
           <div className="inline-block min-w-full py-2 align-middle md:px-6 lg:px-8">
             <div className="overflow-hidden shadow-md border border-gray-200 rounded-xl">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="py-4 px-4 text-left">
-                      <input
-                        type="checkbox"
-                        checked={selectedProducts.length === products.length && products.length > 0}
-                        onChange={handleSelectAll}
-                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                    </th>
-                    <th 
-                      className="py-4 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-150" 
-                      onClick={() => handleSort("name")}
+              {loading ? (
+                <Loader />
+              ) : (
+                <ProductTable
+                  products={products}
+                  paginatedProducts={paginatedProducts}
+                  selectedProducts={selectedProducts}
+                  handleSelectAll={handleSelectAll}
+                  handleSelectProduct={handleSelectProduct}
+                  handleViewDetails={handleViewDetails}
+                  handleEdit={handleEdit}
+                  handleDeleteProduct={handleDeleteProduct}
+                  sortConfig={sortConfig}
+                  handleSort={handleSort}
+                  getCategoryName={getCategoryName}
+                  translateStatus={translateStatus}
+                  setPreviewImage={setPreviewImage}
+                  IMAGE_BASE_URL={IMAGE_BASE_URL}
+                />
+              )}
+              {/* Pagination controls et empty state restent ici */}
+              {true && ( // Remplace temporairement totalPages > 1 par true pour forcer l'affichage
+                <div className="flex flex-col items-center gap-2 mt-4">
+                  <div className="flex gap-2">
+                    <button
+                      className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     >
-                      <div className="flex items-center space-x-1">
-                        <span>Nom</span>
-                        {sortConfig?.key === "name" && (
-                          <span className="text-indigo-600">
-                            {sortConfig.direction === "asc" ? " ↑" : " ↓"}
-                          </span>
-                        )}
-                      </div>
-                    </th>
-                    <th 
-                      className="py-4 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-150" 
-                      onClick={() => handleSort("categoryId")}
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Catégorie</span>
-                        {sortConfig?.key === "categoryId" && (
-                          <span className="text-indigo-600">
-                            {sortConfig.direction === "asc" ? " ↑" : " ↓"}
-                          </span>
-                        )}
-                      </div>
-                    </th>
-                    <th 
-                      className="py-4 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-150" 
-                      onClick={() => handleSort("amount")}
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Prix</span>
-                        {sortConfig?.key === "amount" && (
-                          <span className="text-indigo-600">
-                            {sortConfig.direction === "asc" ? " ↑" : " ↓"}
-                          </span>
-                        )}
-                      </div>
-                    </th>
-                    <th 
-                      className="py-4 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-150" 
-                      onClick={() => handleSort("status")}
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Statut</span>
-                        {sortConfig?.key === "status" && (
-                          <span className="text-indigo-600">
-                            {sortConfig.direction === "asc" ? " ↑" : " ↓"}
-                          </span>
-                        )}
-                      </div>
-                    </th>
-                    <th className="py-4 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {paginatedProducts.map((product: any) => (
-                    <tr 
-                      key={product.id} 
-                      className="hover:bg-gray-50 cursor-pointer transition-colors duration-150"
-                      onClick={() => handleViewDetails(product)}
-                    >
-                      <td className="py-4 px-4" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selectedProducts.includes(product.id)}
-                          onChange={() => handleSelectProduct(product.id)}
-                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                        />
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center">
-                          {product.images && product.images.length > 0 ? (
-                            <img
-                              src={`http://localhost:8082${product.images[0].url}`}
-                              alt={product.name}
-                              className="h-10 w-10 rounded-lg object-cover mr-3 cursor-pointer"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPreviewImage(`http://localhost:8082${product.images[0].url}`);
-                              }}
-                            />
-                          ) : (
-                            <div className="h-10 w-10 rounded-lg bg-gray-200 flex items-center justify-center mr-3">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                            </div>
-                          )}
-                          <div>
-                            <div className="font-medium text-gray-900">{product.name}</div>
-                            <div className="text-gray-500 text-sm">{product.brand}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-500">
-                        {getCategoryName(product.category || product.categoryId)}
-                      </td>
-                      <td className="px-4 py-4 text-sm font-medium text-gray-900">
-                        {product.amount} €
-                      </td>
-                      <td className="px-4 py-4 text-sm">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                            product.status === "AVAILABLE"
-                              ? "bg-green-100 text-green-800"
-                              : product.status === "OUT_OF_STOCK"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : "bg-red-100 text-red-800"
+                      Précédent
+                    </button>
+                    {Array.from({ length: totalPages }).map((_, i) => {
+                      const page = i + 1;
+                      return (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`px-3 py-1 rounded transition-colors duration-200 ${
+                            currentPage === page ? "bg-indigo-600 text-white" : "bg-gray-200 hover:bg-gray-300"
                           }`}
                         >
-                          {translateStatus(product.status)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-500" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEdit(product.id);
-                            }}
-                            className="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-1 rounded-md transition-colors duration-200"
-                          >
-                            Modifier
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteProduct(product.id);
-                            }}
-                            className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md transition-colors duration-200"
-                          >
-                            Supprimer
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {/* Pagination controls */}
-              {totalPages > 1 && (
-                <div className="flex justify-center items-center gap-2 mt-4">
-                  <button
-                    className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  >
-                    Précédent
-                  </button>
+                          {page}
+                        </button>
+                      );
+                    })}
+                    <button
+                      className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    >
+                      Suivant
+                    </button>
+                  </div>
                   <span>
                     Page {currentPage} sur {totalPages}
                   </span>
-                  <button
-                    className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  >
-                    Suivant
-                  </button>
                 </div>
               )}
               {products.length === 0 && !loading && (
@@ -1131,6 +693,15 @@ export default function Products() {
           </div>
         </div>
       </div>
+
+      {/* Notification */}
+      {notification && (
+        <div className={`fixed top-6 right-6 z-[99999] px-6 py-4 rounded-lg shadow-lg text-white transition-all duration-300 ${
+          notification.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+        }`}>
+          {notification.message}
+        </div>
+      )}
     </div>
   );
 }

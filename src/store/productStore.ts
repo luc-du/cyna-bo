@@ -96,65 +96,47 @@ export const deleteMultipleProducts = createAsyncThunk(
 
 export const updateProduct = createAsyncThunk(
   "products/updateProduct",
-  async ({ id, data }: { id: number, data: FormData }, { rejectWithValue, dispatch }) => {
+  async ({ id, data }: { id: number; data: FormData }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem("token");
-      
-      // Add special flags to handle Stripe errors
-      data.append("ignoreStripeErrors", "true");
-      data.append("skipStripeOnError", "true");
-      
-      const response = await fetch(`${PRODUCT_API_BASE_URL}/${id}`, {
-        method: "PUT",
+      const hasImages = data.getAll("images").length > 0;
+      let url = "";
+      let body: FormData;
+
+      if (hasImages) {
+        // Only send images for the images endpoint
+        url = `/api/v1/products/${id}/images`;
+        body = new FormData();
+        data.getAll("images").forEach((img) => {
+          body.append("images", img as File);
+        });
+      } else {
+        // Send all product fields (excluding images) for the product info endpoint
+        url = `/api/v1/products`;
+        body = new FormData();
+        data.forEach((value, key) => {
+          if (key !== "images") {
+            body.append(key, value);
+          }
+        });
+        body.set("id", String(id)); // Ensure id is present in the DTO
+      }
+
+      const response = await fetch(url, {
+        method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
-        },
-        body: data,
+          // Do NOT set Content-Type for FormData; browser will set it
+        } as any,
+        body,
       });
-      
-      // Get the response text first, then decide what to do with it
-      const responseText = await response.text();
-      console.log("Product update response:", responseText);
-      
-      // Even if the response isn't successful, we need to handle specific cases
       if (!response.ok) {
-        console.error("Server error:", responseText);
-        
-        // Check for specific error messages we can handle
-        if (responseText.includes("Product already exists") || 
-            responseText.includes("stripe") || 
-            responseText.includes("subscription")) {
-          
-          console.log("Detected Stripe product existence error, checking if product was updated");
-          // Force refresh to see if the product was updated despite the Stripe error
-          await dispatch(fetchProducts());
-          
-          return { 
-            id,
-            message: "Product updated but Stripe reports issues. The product data is still updated in your catalog.",
-            stripeError: true 
-          };
-        }
-        
-        throw new Error(responseText || "Failed to update product");
+        const errorData = await response.json();
+        return rejectWithValue(errorData);
       }
-      
-      let updatedProduct;
-      try {
-        // Try to parse as JSON if possible
-        updatedProduct = responseText ? JSON.parse(responseText) : {};
-      } catch (e) {
-        console.log("Response is not JSON, using as is");
-        updatedProduct = { id, message: responseText };
-      }
-      
-      // Force refresh the product list
-      await dispatch(fetchProducts());
-      
-      return updatedProduct;
-    } catch (error) {
-      console.error("Error updating product:", error);
-      return rejectWithValue(error instanceof Error ? error.message : "Erreur lors de la mise à jour du produit");
+      return await response.json();
+    } catch (error: any) {
+      return rejectWithValue(error.message || "Unknown error");
     }
   }
 );
@@ -218,13 +200,17 @@ export const createProduct = createAsyncThunk(
 
 export const deleteProductImage = createAsyncThunk(
   "products/deleteProductImage",
-  async (productId: number, { rejectWithValue }) => {
+  async ({ productId, imageId }: { productId: number; imageId: number }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem("token");
       await axios.delete(`${PRODUCT_API_BASE_URL}/${productId}/images`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        data: { imageId }, // Send imageId in the request body
       });
-      return productId;
+      return { productId, imageId };
     } catch (error) {
       return rejectWithValue("Erreur lors de la suppression de l'image");
     }
@@ -290,18 +276,18 @@ export const fetchProductDetails = createAsyncThunk(
       if (!token) {
         throw new Error("No token found");
       }
-      
-      const response = await fetch(`${PRODUCT_API_BASE_URL}/${productId}`, {
+      // Add includeCategoryDetails=true to ensure category is included
+      const response = await fetch(`${PRODUCT_API_BASE_URL}/${productId}?includeCategoryDetails=true`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      
+
       if (!response.ok) {
         throw new Error("Failed to fetch product details");
       }
-      
+
       const data = await response.json();
       return data;
     } catch (error) {
@@ -317,7 +303,7 @@ interface ProductState {
 }
 
 const initialState: ProductState = {
-  products: [],
+  products: [] as Product[],
   loading: false,
   error: null,
 };
@@ -347,12 +333,16 @@ const productSlice = createSlice({
         state.products = state.products.filter((p) => !action.payload.includes(Number(p.id)));
       })
       .addCase(updateProduct.fulfilled, (state, action) => {
-        // If we got a payload with stripeError flag, don't try to update the state
-        // since we're reloading the products list anyway
-        if (action.payload && !(action.payload.stripeError)) {
-          state.products = state.products.map((p) =>
-            p.id === action.payload.id ? action.payload : p
-          );
+        if (!action.payload || !action.payload.id) return;
+        const idx = state.products.findIndex(p => p.id === action.payload.id);
+        if (idx !== -1) {
+          // Merge all fields except images if not present in payload
+          const updated = { ...state.products[idx], ...action.payload };
+          if (typeof action.payload.images === "undefined") {
+            // preserve previous images if not returned by backend
+            updated.images = state.products[idx].images;
+          }
+          state.products[idx] = updated;
         }
       })
       .addCase(createProduct.fulfilled, (state, action) => {
@@ -368,9 +358,18 @@ const productSlice = createSlice({
       .addCase(fetchProductDetails.fulfilled, (state, action) => {
         const index = state.products.findIndex(p => p.id === action.payload.id);
         if (index !== -1) {
-          state.products[index] = action.payload;
+          state.products[index] = { 
+            ...state.products[index],
+            ...action.payload 
+          };
         } else {
           state.products.push(action.payload);
+        }
+      })
+      .addCase(deleteProductImage.fulfilled, (state, action) => {
+        const prod = state.products.find(p => Number(p.id) === action.payload.productId);
+        if (prod && prod.images) {
+          prod.images = prod.images.filter((img: any) => img.id !== action.payload.imageId);
         }
       });
   },

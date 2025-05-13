@@ -86,18 +86,20 @@ export default function Categories() {
     setSortConfig({ key, direction });
   };
 
-  const handleDeleteCategory = (categoryId: number) => {
+  const handleDeleteCategory = async (categoryId: number) => {
     if (window.confirm("Êtes-vous sûr de vouloir supprimer cette catégorie ?")) {
-      dispatch(deleteCategory(categoryId));
+      await dispatch(deleteCategory(categoryId));
+      dispatch(fetchCategories());
     }
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (selectedCategories.length === 0) return;
 
     if (window.confirm(`Êtes-vous sûr de vouloir supprimer ${selectedCategories.length} catégorie(s) ?`)) {
-      dispatch(deleteMultipleCategories(selectedCategories));
+      await dispatch(deleteMultipleCategories(selectedCategories));
       setSelectedCategories([]);
+      dispatch(fetchCategories());
     }
   };
 
@@ -120,7 +122,7 @@ export default function Categories() {
         <div className="sm:flex-auto">
           <h1 className="text-2xl font-semibold text-gray-900">Catégories</h1>
           <p className="mt-2 text-sm text-gray-500">
-            Liste de toutes les catégories de votre compte.
+            Liste de toutes les catégories disponibles sur Cyna IT.
           </p>
         </div>
         <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
@@ -182,9 +184,9 @@ export default function Categories() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
-                <div className="flex items-center">
-                  <span className="text-gray-500 w-32">Description:</span>
-                  <p className="font-medium">{selectedCategory.description || "Aucune description disponible"}</p>
+                <div className="flex">
+                  <span className="text-gray-500 w-32 flex-shrink-0 pt-1">Description:</span>
+                  <p className="font-medium break-words">{selectedCategory.description || "Aucune description disponible"}</p>
                 </div>
                 <div>
                   <span className="text-gray-500">Produits dans cette catégorie:</span>

@@ -3,22 +3,17 @@ import {
   DollarSign,
   Package,
   ShoppingCart,
-  ArrowUpRight,
-  ArrowDownRight,
   Folder,
 } from "lucide-react";
-import {
-  mockDashboardStats,
-  mockOrders,
-  mockSupportTickets,
-} from "../mocks/data";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchUserProfile } from "../store/authStore";
 import { fetchProducts } from "../store/productStore";
 import { fetchCategories } from "../store/categoryStore";
+import { fetchOrders } from "../store/orderStore";
 import type { RootState, AppDispatch } from "../store/store";
-import  { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { mockSupportTickets } from "../mocks/data";
 
 export default function Dashboard() {
   const dispatch = useDispatch<AppDispatch>();
@@ -28,23 +23,24 @@ export default function Dashboard() {
   );
   const { products } = useSelector((state: RootState) => state.products);
   const { categories } = useSelector((state: RootState) => state.categories);
+  const { orders } = useSelector((state: RootState) => state.orders);
+
   const [profileFetched, setProfileFetched] = useState(false);
   const isRedirectingRef = useRef(false);
 
   useEffect(() => {
-    // Prevent multiple fetch attempts if we're already redirecting
     if (isAuthenticated && !profileFetched && !loading && !isRedirectingRef.current) {
       dispatch(fetchUserProfile())
         .unwrap()
         .then(() => {
           setProfileFetched(true);
-          // Only fetch products and categories after successful profile fetch
           dispatch(fetchProducts());
           dispatch(fetchCategories());
+          dispatch(fetchOrders());
         })
         .catch(() => {
           console.error("Redirection due to profile fetch failure");
-          isRedirectingRef.current = true; // Mark that we're redirecting
+          isRedirectingRef.current = true;
           navigate("/login");
         });
     }
@@ -55,53 +51,85 @@ export default function Dashboard() {
   }
 
   if (!isAuthenticated) {
-    return null; // Don't render anything if not authenticated
+    return null;
   }
 
   if (!user || !user.firstname) {
     return <div>Impossible de charger le profil utilisateur.</div>;
   }
 
+  const totalSales = Array.isArray(orders)
+    ? orders
+        .filter((order: any) =>
+          ["active", "ended", "ACTIVE", "ENDED"].includes(
+            String(order.status).toLowerCase()
+          )
+        )
+        .reduce((sum: number, order: any) => sum + Number(order.amount || 0), 0)
+    : 0;
+
+  const totalOrders = Array.isArray(orders) ? orders.length : 0;
+
+  const averageOrderValue =
+    totalOrders > 0
+      ? (
+          orders.reduce(
+            (sum: number, order: any) => sum + Number(order.amount || 0),
+            0
+          ) / totalOrders
+        ).toFixed(2)
+      : 0;
+
+  const activeProducts = Array.isArray(products)
+    ? products.filter(
+        (product: any) =>
+          String(product.status).toUpperCase() === "AVAILABLE"
+      ).length
+    : 0;
+
   const stats = [
     {
       name: "Total des ventes",
-      value: mockDashboardStats.totalSales + " €",
-      change: "+12.5%",
-      trend: "up",
+      value: totalSales + " €",
       icon: DollarSign,
     },
     {
       name: "Total des commandes",
-      value: mockDashboardStats.totalOrders,
-      change: "+8.2%",
-      trend: "up",
+      value: totalOrders,
       icon: ShoppingCart,
     },
     {
       name: "Valeur moyenne des commandes",
-      value: mockDashboardStats.averageOrderValue + " €",
-      change: "-3.1%",
-      trend: "down",
+      value: averageOrderValue + " €",
       icon: BarChart3,
     },
     {
       name: "Produits actifs",
-      value: mockDashboardStats.activeProducts,
-      change: "+2.3%",
-      trend: "up",
+      value: activeProducts,
       icon: Package,
     }
   ];
 
-  // Get the most recent 3 products
-  const recentProducts = [...products]
-    .sort((a, b) => Number(b.id) - Number(a.id))
-    .slice(0, 3);
+  const recentProducts = Array.isArray(products)
+    ? [...products]
+        .sort((a, b) => Number(b.id) - Number(a.id))
+        .slice(0, 3)
+    : [];
 
-  // Get the most recent 3 categories
-  const recentCategories = [...categories]
-    .sort((a, b) => b.id - a.id)
-    .slice(0, 3);
+  const recentCategories = Array.isArray(categories)
+    ? [...categories]
+        .sort((a, b) => b.id - a.id)
+        .slice(0, 3)
+    : [];
+
+  const recentOrders = Array.isArray(orders)
+    ? [...orders]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 3)
+    : [];
+
+  // Use mocked support tickets for now
+  const recentSupportTickets = mockSupportTickets.slice(0, 3);
 
   return (
     <div className="px-4 sm:px-6 lg:px-8">
@@ -112,7 +140,7 @@ export default function Dashboard() {
           </h1>
           {user && (
             <p className="mt-2 text-lg text-gray-700">
-              Bienvenue, {user.firstname}!
+              Bonjour, {user.firstname}!
             </p>
           )}
         </div>
@@ -137,18 +165,6 @@ export default function Dashboard() {
                 <p className="text-2xl font-semibold text-gray-900">
                   {item.value}
                 </p>
-                <p
-                  className={`ml-2 flex items-baseline text-sm font-semibold ${
-                    item.trend === "up" ? "text-green-600" : "text-red-600"
-                  }`}
-                >
-                  {item.trend === "up" ? (
-                    <ArrowUpRight className="h-4 w-4" />
-                  ) : (
-                    <ArrowDownRight className="h-4 w-4" />
-                  )}
-                  <span className="ml-1">{item.change}</span>
-                </p>
               </dd>
             </div>
           ))}
@@ -156,7 +172,6 @@ export default function Dashboard() {
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
-        {/* Commandes récentes */}
         <div className="bg-white shadow rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-medium text-gray-900">
@@ -171,7 +186,7 @@ export default function Dashboard() {
           </div>
           <div className="flow-root">
             <ul className="-my-5 divide-y divide-gray-200">
-              {mockOrders.slice(0, 3).map((order) => (
+              {recentOrders.map((order: any) => (
                 <li key={order.id} className="py-4">
                   <div className="flex items-center space-x-4">
                     <div className="flex-1 min-w-0">
@@ -179,12 +194,14 @@ export default function Dashboard() {
                         Commande #{order.id}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {new Date(order.createdAt).toLocaleDateString()}
+                        {order.createdAt
+                          ? new Date(order.createdAt).toLocaleDateString()
+                          : ""}
                       </p>
                     </div>
                     <div className="flex-shrink-0">
                       <span className="text-sm font-medium text-gray-900">
-                        {order.amount}
+                        {order.amount} €
                       </span>
                     </div>
                   </div>
@@ -194,7 +211,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Tickets de support */}
         <div className="bg-white shadow rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-medium text-gray-900">
@@ -209,7 +225,7 @@ export default function Dashboard() {
           </div>
           <div className="flow-root">
             <ul className="-my-5 divide-y divide-gray-200">
-              {mockSupportTickets.slice(0, 3).map((ticket) => (
+              {recentSupportTickets.map((ticket: any) => (
                 <li key={ticket.id} className="py-4">
                   <div className="flex items-center space-x-4">
                     <div className="flex-1 min-w-0">
@@ -217,7 +233,9 @@ export default function Dashboard() {
                         {ticket.subject}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {new Date(ticket.createdAt).toLocaleDateString()}
+                        {ticket.createdAt
+                          ? new Date(ticket.createdAt).toLocaleDateString()
+                          : ""}
                       </p>
                     </div>
                     <div>
@@ -241,9 +259,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Second row for Products and Categories */}
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
-        {/* Produits récents */}
         <div className="bg-white shadow rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-medium text-gray-900">
@@ -257,7 +273,7 @@ export default function Dashboard() {
             </span>
           </div>
           <div className="flow-root">
-            {products && products.length > 0 ? (
+            {recentProducts && recentProducts.length > 0 ? (
               <ul className="-my-5 divide-y divide-gray-200">
                 {recentProducts.map((product) => (
                   <li key={product.id} className="py-4">
@@ -300,7 +316,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Catégories récentes */}
         <div className="bg-white shadow rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-medium text-gray-900">
@@ -314,7 +329,7 @@ export default function Dashboard() {
             </span>
           </div>
           <div className="flow-root">
-            {categories && categories.length > 0 ? (
+            {recentCategories && recentCategories.length > 0 ? (
               <ul className="-my-5 divide-y divide-gray-200">
                 {recentCategories.map((category) => (
                   <li key={category.id} className="py-4">
@@ -337,7 +352,7 @@ export default function Dashboard() {
                           {category.name}
                         </p>
                         <p className="text-sm text-gray-500">
-                          {category.products.length|| 0} produits
+                          {category.products.length || 0} produits
                         </p>
                       </div>
                     </div>

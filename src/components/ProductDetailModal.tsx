@@ -13,7 +13,6 @@ interface ProductDetailModalProps {
 
 const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   product,
-  categories,
   onClose,
   getCategoryName,
   translateStatus,

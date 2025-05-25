@@ -385,9 +385,25 @@ export default function Products() {
         if (key === "categoryId") {
           const aCat = getCategoryName(a.category || a.categoryId);
           const bCat = getCategoryName(b.category || b.categoryId);
-          return aCat.localeCompare(bCat, "fr", { sensitivity: "base" }) * order;
+          // Normalisation pour tri alphabétique correct
+          const normalize = (str: string) =>
+            str
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .toLowerCase()
+              .trim();
+          return normalize(aCat).localeCompare(normalize(bCat), "fr", { sensitivity: "base" }) * order;
         }
         // Alphabetical sort (case-insensitive) for name, brand, status, etc.
+        if (typeof a[key] === "string" && typeof b[key] === "string") {
+          const normalize = (str: string) =>
+            str
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .toLowerCase()
+              .trim();
+          return normalize(a[key]).localeCompare(normalize(b[key]), "fr", { sensitivity: "base" }) * order;
+        }
         const aValue = (a[key] ?? "").toString().toLowerCase();
         const bValue = (b[key] ?? "").toString().toLowerCase();
         return aValue.localeCompare(bValue, "fr", { sensitivity: "base" }) * order;
@@ -416,14 +432,6 @@ export default function Products() {
             className="inline-flex items-center justify-center rounded-md border border-transparent bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:w-auto transition-all duration-200"
           >
             Ajouter un produit
-          </button>
-          <button
-            type="button"
-            onClick={() => dispatch(fetchProducts())}
-            className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:w-auto transition-all duration-200"
-            title="Rafraîchir la liste des produits"
-          >
-            Rafraîchir
           </button>
         </div>
       </div>

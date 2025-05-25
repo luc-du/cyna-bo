@@ -1,20 +1,32 @@
 import React, { useEffect, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { fetchOrders, fetchOrderDetails, cancelSubscription, Order } from "../store/orderStore";
+import { fetchProducts } from "../store/productStore";
+import { fetchCategories } from "../store/categoryStore";
 import { X, Search } from "lucide-react";
 
 export default function Orders() {
   const dispatch = useAppDispatch();
   const { orders, loading, selectedOrder, error } = useAppSelector((state) => state.orders);
+
+  // Ajout récupération produits et catégories
+  const products = useAppSelector((state: any) => state.products.products);
+  const categories = useAppSelector((state: any) => state.categories.categories);
+
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [searchTimeout, setSearchTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  type OrderSortableKeys = "id" | "product" | "category" | "amount" | "status" | "createdAt";
+  // Par défaut, aucun tri appliqué (utilise l'ordre d'origine)
+  const [sortConfig, setSortConfig] = useState<{ key: OrderSortableKeys; direction: "asc" | "desc" } | null>(null);
 
-  // Load orders when component mounts
+  // Load orders, products, categories when component mounts
   useEffect(() => {
     dispatch(fetchOrders());
+    dispatch(fetchProducts());
+    dispatch(fetchCategories());
   }, [dispatch]);
 
   // Fetch order details when selected
@@ -64,23 +76,74 @@ export default function Orders() {
     }
   };
 
-  // Filter orders by search term
-  const filteredOrders = orders.filter((order: any) => {
-    if (!search) return true;
-    
-    const searchLower = search.toLowerCase();
-    return (
-      order.id.toString().includes(searchLower) ||
-      (order.productName && order.productName.toLowerCase().includes(searchLower)) ||
-      order.status.toLowerCase().includes(searchLower) ||
-      (order.customerId && order.customerId.toLowerCase().includes(searchLower))
-    );
-  });
+  // Helpers pour afficher nom produit et catégorie
+  const getProductById = (id: number | string) =>
+    Array.isArray(products) ? products.find((p: any) => String(p.id) === String(id)) : undefined;
 
-  // Sort orders by date (most recent first)
-  const sortedOrders = [...filteredOrders].sort((a, b) => {
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  });
+  const getCategoryName = (categoryOrId: any) => {
+    if (!categoryOrId) return "Catégorie inconnue";
+    if (typeof categoryOrId === "object" && categoryOrId.name) return categoryOrId.name;
+    const catId = typeof categoryOrId === "object" ? categoryOrId.id : categoryOrId;
+    return Array.isArray(categories)
+      ? (categories.find((c: any) => String(c.id) === String(catId))?.name || "Catégorie inconnue")
+      : "Catégorie inconnue";
+  };
+
+  // Filter orders by search term
+  const filteredOrders = Array.isArray(orders)
+    ? orders.filter((order: any) => {
+        if (!search) return true;
+        const searchLower = search.toLowerCase();
+        return (
+          order.id?.toString().includes(searchLower) ||
+          (order.productName && order.productName.toLowerCase().includes(searchLower)) ||
+          (order.status && order.status.toLowerCase().includes(searchLower)) ||
+          (order.customerId && order.customerId.toLowerCase().includes(searchLower))
+        );
+      })
+    : [];
+
+  // Tri des commandes selon la colonne sélectionnée
+  const sortedOrders = sortConfig
+    ? [...filteredOrders].sort((a, b) => {
+        const { key, direction } = sortConfig;
+        const order = direction === "asc" ? 1 : -1;
+
+        if (key === "product") {
+          const aProd = getProductById(a.productId);
+          const bProd = getProductById(b.productId);
+          const normalize = (str: string) =>
+            str
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .toLowerCase()
+              .trim();
+          const aName = aProd?.name ? normalize(String(aProd.name)) : normalize(a.productName || "");
+          const bName = bProd?.name ? normalize(String(bProd.name)) : normalize(b.productName || "");
+          return aName.localeCompare(bName, "fr", { sensitivity: "base" }) * order;
+        }
+        if (key === "category") {
+          const aProd = getProductById(a.productId);
+          const bProd = getProductById(b.productId);
+          const aCat = getCategoryName(aProd?.category || aProd?.categoryId);
+          const bCat = getCategoryName(bProd?.category || bProd?.categoryId);
+          return aCat.localeCompare(bCat, "fr", { sensitivity: "base" }) * order;
+        }
+        if (key === "amount") {
+          return (Number(a.amount) - Number(b.amount)) * order;
+        }
+        if (key === "status") {
+          return (a.status || "").localeCompare(b.status || "", "fr", { sensitivity: "base" }) * order;
+        }
+        if (key === "createdAt") {
+          return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * order;
+        }
+        if (key === "id") {
+          return (Number(a.id) - Number(b.id)) * order;
+        }
+        return 0;
+      })
+    : filteredOrders;
 
   // Paginate orders
   const paginatedOrders = sortedOrders.slice(
@@ -156,6 +219,15 @@ export default function Orders() {
     });
   };
 
+  // Handler pour le tri
+  const handleSort = (key: OrderSortableKeys) => {
+    let direction: "asc" | "desc" = "asc";
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    }
+    setSortConfig({ key, direction });
+  };
+
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
       <div className="sm:flex sm:items-center">
@@ -211,7 +283,17 @@ export default function Orders() {
                   Produit
                 </label>
                 <p className="mt-1 text-sm text-gray-900">
-                  {selectedOrder.productName || `Produit #${selectedOrder.productId}`}
+                  {/* Affichage du nom du produit */}
+                  {getProductById(selectedOrder.productId)?.name || selectedOrder.productName || `Produit #${selectedOrder.productId}`}
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-500">
+                  Catégorie du produit
+                </label>
+                <p className="mt-1 text-sm text-gray-900">
+                  {/* Affichage de la catégorie associée */}
+                  {getCategoryName(getProductById(selectedOrder.productId)?.category || getProductById(selectedOrder.productId)?.categoryId)}
                 </p>
               </div>
               <div>
@@ -307,33 +389,87 @@ export default function Orders() {
                     <tr>
                       <th
                         scope="col"
-                        className="py-3.5 pl-4 pr-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:pl-6"
+                        className="py-3.5 pl-4 pr-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sm:pl-6 cursor-pointer hover:bg-gray-100"
+                        onClick={() => handleSort("id")}
                       >
-                        ID
+                        <div className="flex items-center space-x-1">
+                          <span>ID</span>
+                          {sortConfig?.key === "id" && (
+                            <span className="text-indigo-600">{sortConfig.direction === "asc" ? " ↑" : " ↓"}</span>
+                          )}
+                        </div>
+                      </th>
+                     <th
+  scope="col"
+  className="px-3 py-3.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hover:bg-gray-100"
+  style={{ cursor: 'pointer' }}
+  onClick={(e) => {
+    // onStoppe toute navigation initiée plus haut dans le DOM
+    e.stopPropagation();
+    // si c’était dans un <a> ou un <Link>, on évite aussi le comportement par défaut
+    e.preventDefault();
+    handleSort('product');
+  }}
+>
+  <div className="flex items-center space-x-1">
+    <span>Produit</span>
+    {sortConfig?.key === 'product' && (
+      <span className="text-indigo-600">
+        {sortConfig.direction === 'asc' ? '↑' : '↓'}
+      </span>
+    )}
+  </div>
+</th>
+
+                      <th
+                        scope="col"
+                        className="px-3 py-3.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                        onClick={e => { e.preventDefault(); e.stopPropagation(); handleSort("category"); }}
+                        tabIndex={-1}
+                        style={{ userSelect: "none", cursor: "pointer" }}
+                      >
+                        <div className="flex items-center space-x-1">
+                          <span>Catégorie</span>
+                          {sortConfig?.key === "category" && (
+                            <span className="text-indigo-600">{sortConfig.direction === "asc" ? " ↑" : " ↓"}</span>
+                          )}
+                        </div>
                       </th>
                       <th
                         scope="col"
-                        className="px-3 py-3.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-3 py-3.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                        onClick={() => handleSort("amount")}
                       >
-                        Produit
+                        <div className="flex items-center space-x-1">
+                          <span>Montant</span>
+                          {sortConfig?.key === "amount" && (
+                            <span className="text-indigo-600">{sortConfig.direction === "asc" ? " ↑" : " ↓"}</span>
+                          )}
+                        </div>
                       </th>
                       <th
                         scope="col"
-                        className="px-3 py-3.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-3 py-3.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                        onClick={() => handleSort("status")}
                       >
-                        Montant
+                        <div className="flex items-center space-x-1">
+                          <span>Statut</span>
+                          {sortConfig?.key === "status" && (
+                            <span className="text-indigo-600">{sortConfig.direction === "asc" ? " ↑" : " ↓"}</span>
+                          )}
+                        </div>
                       </th>
                       <th
                         scope="col"
-                        className="px-3 py-3.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-3 py-3.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                        onClick={() => handleSort("createdAt")}
                       >
-                        Statut
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-3 py-3.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
-                        Date
+                        <div className="flex items-center space-x-1">
+                          <span>Date</span>
+                          {sortConfig?.key === "createdAt" && (
+                            <span className="text-indigo-600">{sortConfig.direction === "asc" ? " ↑" : " ↓"}</span>
+                          )}
+                        </div>
                       </th>
                       <th
                         scope="col"
@@ -350,7 +486,10 @@ export default function Orders() {
                           {order.id}
                         </td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                          {order.productName || `Produit #${order.productId}`}
+                          {getProductById(order.productId)?.name || order.productName || `Produit #${order.productId}`}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                          {getCategoryName(getProductById(order.productId)?.category || getProductById(order.productId)?.categoryId)}
                         </td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                           {order.amount}  €

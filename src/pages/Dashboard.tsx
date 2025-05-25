@@ -14,6 +14,7 @@ import type { RootState, AppDispatch } from "../store/store";
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { mockSupportTickets } from "../mocks/data";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Legend, CartesianGrid } from "recharts";
 
 export default function Dashboard() {
   const dispatch = useDispatch<AppDispatch>();
@@ -131,6 +132,83 @@ export default function Dashboard() {
   // Use mocked support tickets for now
   const recentSupportTickets = mockSupportTickets.slice(0, 3);
 
+  // --- Préparation des données pour les graphiques ---
+
+  // 1. Histogramme des ventes par jour/semaine
+  const salesByDay: Record<string, number> = {};
+  const salesByWeek: Record<string, number> = {};
+  if (Array.isArray(orders)) {
+    orders.forEach((order: any) => {
+      if (!order.createdAt) return;
+      const date = new Date(order.createdAt);
+      // Format YYYY-MM-DD
+      const dayKey = date.toISOString().slice(0, 10);
+      salesByDay[dayKey] = (salesByDay[dayKey] || 0) + Number(order.amount || 0);
+
+      // Format YYYY-WW (ISO week)
+      const week = `${date.getFullYear()}-W${String(Math.ceil(
+        ((date.getTime() - new Date(date.getFullYear(), 0, 1).getTime()) / 86400000 + new Date(date.getFullYear(), 0, 1).getDay() + 1) / 7
+      )).padStart(2, "0")}`;
+      salesByWeek[week] = (salesByWeek[week] || 0) + Number(order.amount || 0);
+    });
+  }
+  const salesByDayData = Object.entries(salesByDay).map(([date, amount]) => ({ date, amount }));
+  const salesByWeekData = Object.entries(salesByWeek).map(([week, amount]) => ({ week, amount }));
+
+  // 2. Panier moyen par catégorie (multi-barres)
+  let avgBasketByCategory: Array<{ category: string; avg: number }> = [];
+  if (Array.isArray(categories)) {
+    avgBasketByCategory = categories.map((cat: any) => {
+      // Trouver tous les produits de cette catégorie
+      const catProducts = Array.isArray(products)
+        ? products.filter((p: any) =>
+            // Supporte p.category (objet ou id) ou p.categoryId
+            (typeof p.category === "object" && p.category?.id === cat.id) ||
+            (typeof p.category === "string" && String(p.category) === String(cat.id)) ||
+            (typeof p.category === "number" && p.category === cat.id) ||
+            (p.categoryId && String(p.categoryId) === String(cat.id))
+          )
+        : [];
+      // Trouver toutes les commandes pour ces produits
+      const catOrders = Array.isArray(orders)
+        ? orders.filter((order: any) =>
+            catProducts.some((p: any) => String(p.id) === String(order.productId))
+          )
+        : [];
+      const avg =
+        catOrders.length > 0
+          ? catOrders.reduce((sum: number, o: any) => sum + Number(o.amount || 0), 0) / catOrders.length
+          : 0;
+      return { category: cat.name, avg: Number(avg.toFixed(2)) };
+    });
+  }
+
+  // 3. Répartition des ventes par catégorie (camembert)
+  let salesByCategory: Array<{ category: string; value: number }> = [];
+  if (Array.isArray(categories)) {
+    salesByCategory = categories.map((cat: any) => {
+      // Trouver tous les produits de cette catégorie
+      const catProducts = Array.isArray(products)
+        ? products.filter((p: any) =>
+            (typeof p.category === "object" && p.category?.id === cat.id) ||
+            (typeof p.category === "string" && String(p.category) === String(cat.id)) ||
+            (typeof p.category === "number" && p.category === cat.id) ||
+            (p.categoryId && String(p.categoryId) === String(cat.id))
+          )
+        : [];
+      // Trouver toutes les commandes pour ces produits
+      const catOrders = Array.isArray(orders)
+        ? orders.filter((order: any) =>
+            catProducts.some((p: any) => String(p.id) === String(order.productId))
+          )
+        : [];
+      const total = catOrders.reduce((sum: number, o: any) => sum + Number(o.amount || 0), 0);
+      return { category: cat.name, value: total };
+    }).filter(c => c.value > 0);
+  }
+
+  const COLORS = ["#6366f1", "#f59e42", "#10b981", "#ef4444", "#fbbf24", "#3b82f6", "#a21caf", "#eab308"];
+
   return (
     <div className="px-4 sm:px-6 lg:px-8">
       <div className="sm:flex sm:items-center">
@@ -146,29 +224,88 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Cartes stats compactes */}
       <div className="mt-8">
-        <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {stats.map((item) => (
             <div
               key={item.name}
-              className="relative overflow-hidden rounded-lg bg-white px-4 pt-5 pb-12 shadow sm:px-6 sm:pt-6"
+              className="relative overflow-hidden rounded-lg bg-white px-3 pt-3 pb-4 shadow flex flex-col items-center"
+              style={{ minWidth: 0 }}
             >
-              <dt>
-                <div className="absolute rounded-md bg-indigo-500 p-3">
-                  <item.icon className="h-6 w-6 text-white" aria-hidden="true" />
+              <div className="flex items-center space-x-2">
+                <div className="rounded-md bg-indigo-500 p-2">
+                  <item.icon className="h-5 w-5 text-white" aria-hidden="true" />
                 </div>
-                <p className="ml-16 truncate text-sm font-medium text-gray-500">
-                  {item.name}
-                </p>
-              </dt>
-              <dd className="ml-16 flex items-baseline pb-6 sm:pb-7">
-                <p className="text-2xl font-semibold text-gray-900">
-                  {item.value}
-                </p>
-              </dd>
+                <div>
+                  <p className="truncate text-xs text-gray-500">{item.name}</p>
+                  <p className="text-lg font-semibold text-gray-900">{item.value}</p>
+                </div>
+              </div>
             </div>
           ))}
         </dl>
+      </div>
+
+      {/* --- Statistiques avancées --- */}
+      <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-2">
+        {/* Histogramme des ventes par jour */}
+        <div className="bg-white shadow rounded-lg p-6 flex flex-col">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Ventes par jour</h2>
+          <div className="flex-1 min-h-[350px]">
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart data={salesByDayData.slice(-14)}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="amount" name="Ventes (€)" fill="#6366f1" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        {/* Histogramme multi-couches du panier moyen par catégorie */}
+        <div className="bg-white shadow rounded-lg p-6 flex flex-col">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Panier moyen par catégorie</h2>
+          <div className="flex-1 min-h-[350px]">
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart data={avgBasketByCategory}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="category" tick={{ fontSize: 12 }} />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="avg" name="Panier moyen (€)" fill="#10b981" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        {/* Camembert répartition des ventes par catégorie */}
+        <div className="bg-white shadow rounded-lg p-6 flex flex-col lg:col-span-2">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Répartition des ventes par catégorie</h2>
+          <div className="flex-1 min-h-[350px] flex items-center justify-center">
+            <ResponsiveContainer width="100%" height={350}>
+              <PieChart>
+                <Pie
+                  data={salesByCategory}
+                  dataKey="value"
+                  nameKey="category"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={120}
+                  label={({ category }) => category}
+                >
+                  {salesByCategory.map((entry, idx) => (
+                    <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">

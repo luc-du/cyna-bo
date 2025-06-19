@@ -17,6 +17,7 @@ import Support from "./pages/Support";
 import Settings from "./pages/Settings";
 import Users from "./pages/Users";
 import Categories from "./pages/Categories";
+import CarouselAdmin from "./components/CarouselAdmin";
 import { useSelector } from "react-redux";
 import type { RootState, AppDispatch } from "./store/store";
 
@@ -79,6 +80,7 @@ function App() {
           <Route path="support" element={<Support />} />
           <Route path="settings" element={<Settings />} />
           <Route path="users" element={<Users />} />
+          <Route path="carousel" element={<CarouselAdmin />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

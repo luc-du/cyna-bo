@@ -85,28 +85,31 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             <h4 className="font-semibold text-gray-800 mb-4">Images</h4>
             {product.images && product.images.length > 0 ? (
               <div className="grid grid-cols-2 gap-4">
-                {product.images.map((image: any, index: number) => (
-                  <div key={index} className="relative group">
-                    <img
-                      src={`${IMAGE_BASE_URL}${image.url}`}
-                      alt={`Produit ${index + 1}`}
-                      className="w-full h-40 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
-                      onClick={e => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setPreviewImage(`${IMAGE_BASE_URL}${image.url}`);
-                      }}
-                    />
-                    <div
-                      className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all duration-200"
-                      onClick={e => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setPreviewImage(`${IMAGE_BASE_URL}${image.url}`);
-                      }}
-                    ></div>
-                  </div>
-                ))}
+                {product.images.map((image: any, index: number) => {
+                  // Les URL sont déjà normalisées par le store
+                  return (
+                    <div key={index} className="relative group">
+                      <img
+                        src={image.url}
+                        alt={`Produit ${index + 1}`}
+                        className="w-full h-40 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
+                        onClick={e => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setPreviewImage(image.url);
+                        }}
+                      />
+                      <div
+                        className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all duration-200"
+                        onClick={e => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setPreviewImage(image.url);
+                        }}
+                      ></div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="flex items-center justify-center h-40 bg-gray-100 rounded-lg">
@@ -132,3 +135,6 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 };
 
 export default ProductDetailModal;
+
+
+

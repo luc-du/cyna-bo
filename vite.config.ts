@@ -1,5 +1,9 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { config } from 'dotenv';
+
+config();
+process.env.VITE_APP_URL = process.env.VITE_APP_URL 
 
 export default defineConfig({
   plugins: [react()],
@@ -9,7 +13,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "http://localhost:8080", // Adresse du backend
+        target: process.env.VITE_APP_URL, 
         changeOrigin: true,
         secure: false,
       },

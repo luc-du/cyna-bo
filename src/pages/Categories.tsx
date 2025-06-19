@@ -10,6 +10,12 @@ import {
 import { X } from "lucide-react";
 import { CategoryForm } from "../components/category";
 
+const normalizeImageUrl = (url: string): string => {
+  const IMAGE_BASE_URL = import.meta.env.VITE_IMAGE_BASE_URL || "http://localhost:8082";
+  if (!url) return "";
+  return url.startsWith('http') ? url : `${IMAGE_BASE_URL}${url}`;
+};
+
 export default function Categories() {
   const dispatch = useAppDispatch();
   const { categories, loading } = useAppSelector((state) => state.categories);
@@ -29,6 +35,7 @@ export default function Categories() {
     dispatch(fetchCategories());
   }, [dispatch]);
 
+  // Handle search with debounce
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearch(value);
@@ -218,28 +225,31 @@ export default function Categories() {
                 <h4 className="font-semibold text-gray-800 mb-4">Images</h4>
                 {selectedCategory.images && selectedCategory.images.length > 0 ? (
                   <div className="grid grid-cols-3 gap-4">
-                    {selectedCategory.images.map((image: any, index: number) => (
-                      <div key={index} className="relative group">
-                        <img
-                          src={`http://localhost:8082${image.url}`}
-                          alt={`Catégorie ${index + 1}`}
-                          className="w-full h-40 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setPreviewImage(`http://localhost:8082${image.url}`);
-                          }}
-                        />
-                        <div 
-                          className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all duration-200"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setPreviewImage(`http://localhost:8082${image.url}`);
-                          }}
-                        ></div>
-                      </div>
-                    ))}
+                    {selectedCategory.images.map((image: any, index: number) => {
+                      const imageUrl = normalizeImageUrl(image.url);
+                      return (
+                        <div key={index} className="relative group">
+                          <img
+                            src={imageUrl}
+                            alt={`Catégorie ${index + 1}`}
+                            className="w-full h-40 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setPreviewImage(imageUrl);
+                            }}
+                          />
+                          <div 
+                            className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all duration-200"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setPreviewImage(imageUrl);
+                            }}
+                          ></div>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="flex items-center justify-center h-40 bg-gray-100 rounded-lg">
@@ -349,21 +359,26 @@ export default function Categories() {
                       <td className="px-4 py-4">
                         <div className="flex items-center">
                           {category.images && category.images.length > 0 ? (
-                            <img
-                              src={`http://localhost:8082${category.images[0].url}`}
-                              alt={category.name}
-                              className="h-10 w-10 rounded-lg object-cover mr-3 cursor-pointer bg-gray-200"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPreviewImage && setPreviewImage(`http://localhost:8082${category.images[0].url}`);
-                              }}
-                              onError={e => {
-                                const img = e.target as HTMLImageElement;
-                                img.style.display = "none";
-                                const fallback = img.nextElementSibling as HTMLElement;
-                                if (fallback) fallback.style.display = "flex";
-                              }}
-                            />
+                            (() => {
+                              const imageUrl = normalizeImageUrl(category.images[0].url);
+                              return (
+                                <img
+                                  src={imageUrl}
+                                  alt={category.name}
+                                  className="h-10 w-10 rounded-lg object-cover mr-3 cursor-pointer bg-gray-200"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPreviewImage && setPreviewImage(imageUrl);
+                                  }}
+                                  onError={e => {
+                                    const img = e.target as HTMLImageElement;
+                                    img.style.display = "none";
+                                    const fallback = img.nextElementSibling as HTMLElement;
+                                    if (fallback) fallback.style.display = "flex";
+                                  }}
+                                />
+                              );
+                            })()
                           ) : (
                             <div style={{ display: "flex" }} className="h-10 w-10 rounded-lg bg-gray-200 items-center justify-center mr-3">
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

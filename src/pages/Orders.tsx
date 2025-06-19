@@ -76,17 +76,17 @@ export default function Orders() {
     }
   };
 
-  // Helpers pour afficher nom produit et catégorie
+  // Helpers to display product and category names
   const getProductById = (id: number | string) =>
     Array.isArray(products) ? products.find((p: any) => String(p.id) === String(id)) : undefined;
 
   const getCategoryName = (categoryOrId: any) => {
-    if (!categoryOrId) return "Catégorie inconnue";
+    if (!categoryOrId) return "Unknown category";
     if (typeof categoryOrId === "object" && categoryOrId.name) return categoryOrId.name;
     const catId = typeof categoryOrId === "object" ? categoryOrId.id : categoryOrId;
     return Array.isArray(categories)
-      ? (categories.find((c: any) => String(c.id) === String(catId))?.name || "Catégorie inconnue")
-      : "Catégorie inconnue";
+      ? (categories.find((c: any) => String(c.id) === String(catId))?.name || "Unknown category")
+      : "Unknown category";
   };
 
   // Filter orders by search term

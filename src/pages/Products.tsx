@@ -22,7 +22,7 @@ const LazyProductDetailModal = lazy(() => import("../components/ProductDetailMod
 export default function Products() {
   const dispatch = useAppDispatch();
 
-  // Sélecteurs Redux sans typage strict pour éviter les erreurs
+  // Redux selectors without strict typing to avoid errors
   const productsState = useAppSelector((state: any) => state.products);
   const products = productsState.products;
   const loading = productsState.loading;
@@ -121,15 +121,16 @@ export default function Products() {
     setSearchTimeout(timeout);
   };
 
+  // Validate form fields for product creation/editing
   const validateForm = (form: typeof createForm | typeof editForm) => {
     const errors: { [key: string]: string } = {};
-    if (!form.name.trim()) errors.name = "Le nom est requis.";
-    if (!form.brand.trim()) errors.brand = "La marque est requise.";
-    if (!form.description.trim()) errors.description = "La description est requise.";
-    if (!form.caracteristics.trim()) errors.caracteristics = "Les caractéristiques sont requises.";
-    if (!form.amount || isNaN(Number(form.amount)) || Number(form.amount) <= 0) errors.amount = "Veuillez entrer un prix valide.";
-    if (!form.categoryId) errors.categoryId = "Veuillez sélectionner une catégorie.";
-    if (!form.status) errors.status = "Veuillez sélectionner un statut.";
+    if (!form.name.trim()) errors.name = "Name is required.";
+    if (!form.brand.trim()) errors.brand = "Brand is required.";
+    if (!form.description.trim()) errors.description = "Description is required.";
+    if (!form.caracteristics.trim()) errors.caracteristics = "Characteristics are required.";
+    if (!form.amount || isNaN(Number(form.amount)) || Number(form.amount) <= 0) errors.amount = "Please enter a valid price.";
+    if (!form.categoryId) errors.categoryId = "Please select a category.";
+    if (!form.status) errors.status = "Please select a status.";
     return errors;
   };
 
@@ -139,6 +140,7 @@ export default function Products() {
       // Use the payload from fetchProductDetails to get the latest product data
       const product = action.payload;
       if (product) {
+        console.log("Editing product with images:", product.images);
         setEditForm({
           name: product.name,
           brand: product.brand,
@@ -182,38 +184,36 @@ export default function Products() {
     formData.append("promo", String(editForm.promo));
     formData.append("skipStripeOnError", "true");
 
-    // Ajout des IDs des images existantes (pour ne pas les perdre)
-    if (editForm.existingImages && editForm.existingImages.length > 0) {
-      const ids = editForm.existingImages.map((img: any) => img.id);
-      ids.forEach((id: number) => {
-        formData.append("existingImageIds", String(id));
-      });
-    }
+    // Logging pour débogage
+    console.log("Images existantes:", editForm.existingImages ? editForm.existingImages.length : 0);
+    console.log("Nouvelles images:", editForm.images ? editForm.images.length : 0);
 
     // N'ajouter le champ images que si des nouvelles images sont sélectionnées
     if (editForm.images && editForm.images.length > 0) {
-      editForm.images.forEach((file) => {
+      console.log("Ajout des nouvelles images au FormData:");
+      editForm.images.forEach((file, idx) => {
+        console.log(`- Image ${idx + 1}:`, file.name);
         formData.append("images", file);
       });
     }
 
     try {
+      showNotification('success', 'Mise à jour du produit en cours...');
+      
       const result = await dispatch(updateProduct({ id: editingProduct, data: formData }));
       
-      if (result.payload && typeof result.payload === 'object') {
-        if ('message' in result.payload) {
-          if (String(result.payload.message).includes('Stripe') || 
-              String(result.payload.message).includes('already exists')) {
-            showNotification('success', "Le produit a été mis à jour mais l'intégration Stripe a rencontré un problème. Cela n'affecte pas les données du produit dans votre catalogue.");
-          }
-        }
+      // Vérifier le résultat
+      if (result.meta.requestStatus === 'fulfilled') {
+        console.log("Mise à jour réussie:", result.payload);
+        await dispatch(fetchProductDetails(editingProduct));
+        await dispatch(fetchProducts());
+        setEditingProduct(null);
+        setCurrentPage(1);
+        showNotification('success', 'Produit modifié avec succès.');
+      } else {
+        console.error("Échec de la mise à jour:", result.payload);
+        showNotification('error', `Erreur: ${result.payload}`);
       }
-      
-      await dispatch(fetchProductDetails(editingProduct));
-      await dispatch(fetchProducts());
-      setEditingProduct(null);
-      setCurrentPage(1);
-      showNotification('success', 'Produit modifié avec succès.');
     } catch (err) {
       showNotification('error', "Erreur lors de la mise à jour du produit");
       console.error("Update error:", err);
@@ -359,10 +359,22 @@ export default function Products() {
 
   const handleEditImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      
+      // Log des fichiers pour débogage
+      console.log(`${files.length} fichiers sélectionnés:`, files.map(f => f.name));
+      
+      // Créer des URL pour la prévisualisation
+      const newImages = files.map(file => {
+        return file;
+      });
+      
       setEditForm({ 
         ...editForm, 
-        images: [...editForm.images, ...Array.from(e.target.files)] 
+        images: [...editForm.images, ...newImages] 
       });
+      
+      // Réinitialiser le champ de fichier pour permettre de sélectionner les mêmes fichiers
       e.target.value = '';
     }
   };
@@ -415,6 +427,14 @@ export default function Products() {
     currentPage * itemsPerPage
   );
   const totalPages = Math.ceil(sortedProducts.length / itemsPerPage);
+
+  // Fonction utilitaire pour obtenir l'URL de l'image principale d'un produit
+  const getProductImageUrl = (product: any) => {
+    if (!product.images || product.images.length === 0) return null;
+    const img = product.images[0];
+    if (!img.url) return null;
+    return img.url.startsWith("http") ? img.url : `${IMAGE_BASE_URL}${img.url}`;
+  };
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
@@ -603,21 +623,26 @@ export default function Products() {
               <label className="block text-sm font-medium text-gray-700">Images existantes</label>
               <div className="grid grid-cols-2 gap-4">
                 {editForm.existingImages && editForm.existingImages.length > 0 ? (
-                  editForm.existingImages.map((image: any, idx: number) => (
-                    <div key={idx} className="relative group">
-                      <img
-                        src={`${IMAGE_BASE_URL}${image.url}`}
-                        alt={`Produit ${idx + 1}`}
-                        className="w-full h-32 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
-                        onClick={e => {
-                          e.stopPropagation();
-                          setPreviewImage(`${IMAGE_BASE_URL}${image.url}`);
-                        }}
-                      />
-                      {/* Optionnel : bouton pour supprimer l'image existante */}
-                      {/* <button onClick={() => handleRemoveExistingImage(idx)} className="absolute top-2 right-2 bg-black bg-opacity-50 text-white rounded-full p-1">&times;</button> */}
-                    </div>
-                  ))
+                  editForm.existingImages.map((image: any, idx: number) => {
+                    const imageUrl = image.url?.startsWith("http")
+                      ? image.url
+                      : `${IMAGE_BASE_URL}${image.url}`;
+                    return (
+                      <div key={idx} className="relative group">
+                        <img
+                          src={imageUrl}
+                          alt={`Produit ${idx + 1}`}
+                          className="w-full h-32 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
+                          onClick={e => {
+                            e.stopPropagation();
+                            setPreviewImage(imageUrl);
+                          }}
+                        />
+                        {/* Optionnel : bouton pour supprimer l'image existante */}
+                        {/* <button onClick={() => handleRemoveExistingImage(idx)} className="absolute top-2 right-2 bg-black bg-opacity-50 text-white rounded-full p-1">&times;</button> */}
+                      </div>
+                    );
+                  })
                 ) : (
                   <div className="col-span-2 text-gray-400">Aucune image existante</div>
                 )}
@@ -723,3 +748,4 @@ export default function Products() {
     </div>
   );
 }
+

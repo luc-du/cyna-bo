@@ -1,9 +1,10 @@
-
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import axios from "axios";
 
+// API base URL for user endpoints
 const USER_API_BASE_URL = "/api/v1/user";
 
+// Helper to get auth headers from localStorage
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");
   if (!token) throw new Error("No token found");
@@ -12,6 +13,7 @@ const getAuthHeaders = () => {
   };
 };
 
+// Fetch all users
 export const fetchUsers = createAsyncThunk("users/fetchUsers", async (_, { rejectWithValue }) => {
   try {
     const response = await axios.get(USER_API_BASE_URL, {
@@ -19,10 +21,11 @@ export const fetchUsers = createAsyncThunk("users/fetchUsers", async (_, { rejec
     });
     return response.data;
   } catch {
-    return rejectWithValue("Erreur lors de la récupération des utilisateurs");
+    return rejectWithValue("Error fetching users");
   }
 });
 
+// Search users by name
 export const searchUsers = createAsyncThunk("users/searchUsers", async (name: string, { rejectWithValue }) => {
   try {
     const response = await axios.get(`${USER_API_BASE_URL}/search?name=${encodeURIComponent(name)}`, {
@@ -30,10 +33,11 @@ export const searchUsers = createAsyncThunk("users/searchUsers", async (name: st
     });
     return response.data;
   } catch {
-    return rejectWithValue("Erreur lors de la recherche d'utilisateurs.");
+    return rejectWithValue("Error searching users.");
   }
 });
 
+// Create a new user
 export const createUser = createAsyncThunk("users/createUser", async (userData: any, { rejectWithValue }) => {
   try {
     const response = await axios.post(USER_API_BASE_URL, userData, {
@@ -41,10 +45,11 @@ export const createUser = createAsyncThunk("users/createUser", async (userData: 
     });
     return response.data;
   } catch {
-    return rejectWithValue("Erreur lors de la création de l'utilisateur");
+    return rejectWithValue("Error creating user");
   }
 });
 
+// Update an existing user
 export const updateUser = createAsyncThunk(
   "users/updateUser",
   async ({ id, userData }: { id: number; userData: any }, { rejectWithValue }) => {
@@ -57,27 +62,26 @@ export const updateUser = createAsyncThunk(
       });
       return response.data;
     } catch (error) {
-      console.error("Erreur PATCH :", error);
-      return rejectWithValue("Erreur lors de la mise à jour de l'utilisateur");
+      console.error("PATCH error:", error);
+      return rejectWithValue("Error updating user");
     }
   }
 );
 
-
+// Delete a user by ID
 export const deleteUser = createAsyncThunk("users/deleteUser", async (id: number, { rejectWithValue }) => {
   try {
     const headers = getAuthHeaders(); 
     await axios.delete(`${USER_API_BASE_URL}/${id}`, { headers });
     return id;
   } catch (error: any) {
-    const message = error?.response?.data || error?.message || "Erreur inconnue";
-    console.error("Erreur DELETE :", message);
+    const message = error?.response?.data || error?.message || "Unknown error";
+    console.error("DELETE error:", message);
     return rejectWithValue(message);
   }
 });
 
-
-
+// User slice for Redux state management
 const userSlice = createSlice({
   name: "users",
   initialState: { users: [] as Array<{ id: number; [key: string]: any }>, loading: false, error: null as string | null },

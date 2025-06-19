@@ -7,6 +7,7 @@ import { loginUser, registerUser } from "../store/authStore";
 import type { RootState } from "../store/store";
 import store from "../store/store";
 import logo from "../assets/cyna.jpeg";
+import ReCAPTCHA from "react-google-recaptcha";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -19,9 +20,16 @@ export default function LoginPage() {
     email: "",
     password: "",
   });
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const RECAPTCHA_SITE_KEY = "6Lc02VcrAAAAAIpBxoS5Rc22Q5nl9ljJQBZoJZTb"; // Clé front reCAPTCHA
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!captchaToken) {
+      toast.error("Veuillez valider le captcha.");
+      return;
+    }
 
     try {
       console.log("Form data submitted:", formData);
@@ -32,15 +40,16 @@ export default function LoginPage() {
             lastname: formData.lastname,
             email: formData.email,
             password: formData.password,
+            captchaToken, // Ajout du token captcha
           })
         ).unwrap();
         toast.success(
           "Inscription réussie ! Notre administrateur doit vérifier votre compte, vérifiez votre boîte mail pour plus d'informations.",
-          { duration: 8000 } 
+          { duration: 8000 }
         );
       } else {
         await dispatch(
-          loginUser({ email: formData.email, password: formData.password })
+          loginUser({ email: formData.email, password: formData.password, captchaToken }) // Ajout du token captcha
         ).unwrap();
         toast.success("Connexion réussie");
       }
@@ -145,6 +154,13 @@ export default function LoginPage() {
                 }
               />
             </div>
+          </div>
+
+          <div className="flex justify-center">
+            <ReCAPTCHA
+              sitekey={RECAPTCHA_SITE_KEY}
+              onChange={(token) => setCaptchaToken(token)}
+            />
           </div>
 
           <div>

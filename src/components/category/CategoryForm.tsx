@@ -39,11 +39,11 @@ export const CategoryForm = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    
+
     const formData = new FormData();
     formData.append("name", form.name);
-    
-    // Make sure to always include description, even if it's empty
+
+    // Always include description, even if empty
     formData.append("description", form.description || "");
     
     if (form.images && form.images.length > 0) {
@@ -124,17 +124,22 @@ export const CategoryForm = ({
             <div className="space-y-1">
               <label className="block text-sm font-medium text-gray-700">Images existantes</label>
               <div className="grid grid-cols-3 gap-4">
-                {initialValues.images.map((image: any, idx: number) => (
-                  <div key={idx} className="relative group">
-                    <img
-                      src={`http://localhost:8082${image.url}`}
-                      alt={`Catégorie ${idx + 1}`}
-                      className="w-full h-32 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
-                      onClick={() => setPreviewImage(`http://localhost:8082${image.url}`)}
-                    />
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all duration-200"></div>
-                  </div>
-                ))}
+                {initialValues.images.map((image: any, idx: number) => {
+                  const imageUrl = image.url?.startsWith("http")
+                    ? image.url
+                    : `http://localhost:8082${image.url}`;
+                  return (
+                    <div key={idx} className="relative group">
+                      <img
+                        src={imageUrl}
+                        alt={`Catégorie ${idx + 1}`}
+                        className="w-full h-32 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
+                        onClick={() => setPreviewImage(imageUrl)}
+                      />
+                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all duration-200"></div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

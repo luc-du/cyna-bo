@@ -20,12 +20,13 @@ import logo from "../../assets/cyna_it_logo.jpeg";
 // Navigation links
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Produits", href: "/dashboard/products", icon: Package },
-  { name: "Catégories", href: "/dashboard/categories", icon: Folder },
-  { name: "Commandes", href: "/dashboard/orders", icon: ShoppingCart },
+  { name: "Products", href: "/dashboard/products", icon: Package },
+  { name: "Categories", href: "/dashboard/categories", icon: Folder },
+  { name: "Orders", href: "/dashboard/orders", icon: ShoppingCart },
+  { name: "Carousel", href: "/dashboard/carousel", icon: Package },
   { name: "Support", href: "/dashboard/support", icon: HeadphonesIcon },
-  { name: "Parametres", href: "/dashboard/settings", icon: Settings },
-  { name: "Utilisateurs", href: "/dashboard/users", icon: UsersIcon },
+  { name: "Settings", href: "/dashboard/settings", icon: Settings },
+  { name: "Users", href: "/dashboard/users", icon: UsersIcon },
 ];
 
 const DashboardLayout: React.FC = () => {

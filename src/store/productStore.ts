@@ -4,13 +4,19 @@ import type { Product } from "../types";
 
 const PRODUCT_API_BASE_URL = "/api/v1/products";
 
-
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");
   if (!token) throw new Error("No token found");
   return {
     Authorization: `Bearer ${token}`,
   };
+};
+
+// Ajoutez cette fonction utilitaire en haut du fichier
+const normalizeImageUrl = (url: string): string => {
+  const IMAGE_BASE_URL = import.meta.env.VITE_IMAGE_BASE_URL || "http://localhost:8082";
+  if (!url) return "";
+  return url.startsWith('http') ? url : `${IMAGE_BASE_URL}${url}`;
 };
 
 export const fetchProducts = createAsyncThunk(
@@ -35,10 +41,20 @@ export const fetchProducts = createAsyncThunk(
       }
 
       const data = await response.json();
-      return data.map((product: any) => ({
-        ...product,
-        category: product.category || null, // Ensure category data is included
-      }));
+      return data.map((product: any) => {
+        // Normaliser les URLs des images
+        if (product.images && Array.isArray(product.images)) {
+          product.images = product.images.map((image: any) => ({
+            ...image,
+            url: normalizeImageUrl(image.url)
+          }));
+        }
+        
+        return {
+          ...product,
+          category: product.category || null,
+        };
+      });
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : "Error fetching products");
     }
@@ -53,6 +69,15 @@ export const fetchProductById = createAsyncThunk(
       const response = await axios.get(`${PRODUCT_API_BASE_URL}/${productId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      
+      // Normaliser les URLs des images
+      if (response.data.images && Array.isArray(response.data.images)) {
+        response.data.images = response.data.images.map((image: any) => ({
+          ...image,
+          url: normalizeImageUrl(image.url)
+        }));
+      }
+      
       return response.data;
     } catch (error) {
       return rejectWithValue("Erreur lors de la récupération du produit");
@@ -96,46 +121,73 @@ export const deleteMultipleProducts = createAsyncThunk(
 
 export const updateProduct = createAsyncThunk(
   "products/updateProduct",
-  async ({ id, data }: { id: number; data: FormData }, { rejectWithValue }) => {
+  async ({ id, data }: { id: number; data: FormData }, { rejectWithValue, dispatch }) => {
     try {
       const token = localStorage.getItem("token");
       const hasImages = data.getAll("images").length > 0;
-      let url = "";
-      let body: FormData;
-
+      
+      // Ajouter des logs pour débogage
+      console.log(`Updating product ${id}, has new images: ${hasImages}`);
+      
       if (hasImages) {
-        // Only send images for the images endpoint
-        url = `/api/v1/products/${id}/images`;
-        body = new FormData();
-        data.getAll("images").forEach((img) => {
-          body.append("images", img as File);
+        // Si nous avons de nouvelles images, créons un FormData spécifique
+        const imageFormData = new FormData();
+        const images = data.getAll("images");
+        images.forEach(image => {
+          console.log("Adding image to upload:", image instanceof File ? image.name : "unknown");
+          imageFormData.append("images", image);
         });
-      } else {
-        // Send all product fields (excluding images) for the product info endpoint
-        url = `/api/v1/products`;
-        body = new FormData();
-        data.forEach((value, key) => {
-          if (key !== "images") {
-            body.append(key, value);
-          }
+
+        // Uploader les images d'abord
+        console.log(`Uploading ${images.length} images to product ${id}`);
+        const imageResponse = await fetch(`${PRODUCT_API_BASE_URL}/${id}/images`, {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
+          body: imageFormData
         });
-        body.set("id", String(id)); // Ensure id is present in the DTO
+
+        if (!imageResponse.ok) {
+          const errorText = await imageResponse.text();
+          console.error("Failed to upload images:", errorText);
+          return rejectWithValue(`Image upload failed: ${errorText}`);
+        }
+        
+        console.log("Images uploaded successfully");
       }
 
-      const response = await fetch(url, {
+      // Ensuite, mettre à jour le reste des informations du produit
+      const productFormData = new FormData();
+      // Copier tous les champs sauf les images
+      for (const [key, value] of data.entries()) {
+        if (key !== "images") {
+          productFormData.append(key, value);
+        }
+      }
+      
+      productFormData.append("id", String(id));
+
+      const response = await fetch(PRODUCT_API_BASE_URL, {
         method: "PATCH",
         headers: {
-          Authorization: `Bearer ${token}`,
-          // Do NOT set Content-Type for FormData; browser will set it
-        } as any,
-        body,
+          Authorization: `Bearer ${token}`
+        },
+        body: productFormData
       });
+
       if (!response.ok) {
-        const errorData = await response.json();
-        return rejectWithValue(errorData);
+        const errorText = await response.text();
+        console.error("Product update failed:", errorText);
+        return rejectWithValue(`Product update failed: ${errorText}`);
       }
-      return await response.json();
+
+      // Récupérer le produit mis à jour avec ses images
+      console.log("Fetching updated product details");
+      const updatedProduct = await dispatch(fetchProductById(id)).unwrap();
+      return updatedProduct;
     } catch (error: any) {
+      console.error("Error in updateProduct:", error);
       return rejectWithValue(error.message || "Unknown error");
     }
   }
@@ -146,9 +198,14 @@ export const createProduct = createAsyncThunk(
   async (data: FormData, { rejectWithValue, dispatch }) => {
     try {
       const token = localStorage.getItem("token");
+      if (!token) throw new Error("No token found");
       
+      // Assurons-nous que ces options sont toujours incluses
       data.append("ignoreStripeErrors", "true");
       data.append("skipStripeOnError", "true");
+
+      // Log pour débugger
+      console.log("Images à envoyer:", data.getAll("images").length);
       
       const response = await fetch(PRODUCT_API_BASE_URL, {
         method: "POST",
@@ -157,29 +214,29 @@ export const createProduct = createAsyncThunk(
         },
         body: data,
       });
-      
+
       const responseText = await response.text();
       console.log("Product creation response:", responseText);
-      
+
       if (!response.ok) {
         console.error("Server error:", responseText);
-        
-        if (responseText.includes("Product already exists") || 
-            responseText.includes("stripe") || 
+
+        if (responseText.includes("Product already exists") ||
+            responseText.includes("stripe") ||
             responseText.includes("subscription")) {
-          
+
           console.log("Detected Stripe product existence error, checking if product was created");
           await dispatch(fetchProducts());
-          
-          return { 
+
+          return {
             message: "Product created but Stripe reports it already exists. This is likely because of a previous attempt.",
-            stripeError: true 
+            stripeError: true
           };
         }
-        
+
         throw new Error(responseText || "Failed to create product");
       }
-      
+
       let newProduct;
       try {
         newProduct = responseText ? JSON.parse(responseText) : {};
@@ -187,9 +244,15 @@ export const createProduct = createAsyncThunk(
         console.log("Response is not JSON, using as is");
         newProduct = { message: responseText };
       }
-      
+
+      // On récupère le produit complet (avec images) après création
+      if (newProduct && newProduct.id) {
+        const fullProduct = await dispatch(fetchProductById(newProduct.id)).unwrap();
+        await dispatch(fetchProducts());
+        return fullProduct;
+      }
+
       await dispatch(fetchProducts());
-      
       return newProduct;
     } catch (error) {
       console.error("Error creating product:", error);

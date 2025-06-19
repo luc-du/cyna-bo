@@ -209,6 +209,9 @@ export default function Dashboard() {
 
   const COLORS = ["#6366f1", "#f59e42", "#10b981", "#ef4444", "#fbbf24", "#3b82f6", "#a21caf", "#eab308"];
 
+  // Ajout de la constante IMAGE_BASE_URL
+  const IMAGE_BASE_URL = import.meta.env.VITE_IMAGE_BASE_URL || "http://localhost:8082";
+
   return (
     <div className="px-4 sm:px-6 lg:px-8">
       <div className="sm:flex sm:items-center">
@@ -418,7 +421,11 @@ export default function Dashboard() {
                       <div className="flex-shrink-0">
                         {product.images && product.images.length > 0 ? (
                           <img
-                            src={`http://localhost:8082${product.images[0].url}`}
+                            src={
+                              product.images[0].url?.startsWith("http")
+                                ? product.images[0].url
+                                : `${IMAGE_BASE_URL}${product.images[0].url}`
+                            }
                             alt={product.name}
                             className="h-12 w-12 rounded-md object-cover"
                           />
@@ -474,7 +481,11 @@ export default function Dashboard() {
                       <div className="flex-shrink-0">
                         {category.images && category.images.length > 0 ? (
                           <img
-                            src={`http://localhost:8082${category.images[0].url}`}
+                            src={
+                              category.images[0].url?.startsWith("http")
+                                ? category.images[0].url
+                                : `${IMAGE_BASE_URL}${category.images[0].url}`
+                            }
                             alt={category.name}
                             className="h-12 w-12 rounded-md object-cover"
                           />

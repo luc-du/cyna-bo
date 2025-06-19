@@ -65,16 +65,18 @@ const ProductTable: React.FC<ProductTableProps> = ({
           </td>
           <td className="px-4 py-4">
             <div className="flex items-center">
+              {/* Ajout affichage image produit */}
               {product.images && product.images.length > 0 ? (
                 <div className="relative h-10 w-10 mr-3">
+                  {/* Display product image or fallback */}
                   <img
-                    src={`${IMAGE_BASE_URL}${product.images[0].url}`}
+                    src={product.images[0].url} // L'URL est déjà normalisée par le store
                     alt={product.name}
                     className="h-10 w-10 rounded-lg object-cover cursor-pointer bg-gray-200"
                     style={{ display: "block" }}
                     onClick={e => {
                       e.stopPropagation();
-                      setPreviewImage(`${IMAGE_BASE_URL}${product.images[0].url}`);
+                      setPreviewImage(product.images[0].url); // L'URL est déjà normalisée
                     }}
                     onError={e => {
                       const img = e.target as HTMLImageElement;

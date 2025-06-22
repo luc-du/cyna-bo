@@ -1,4 +1,5 @@
 import React from "react";
+import { normalizeImageUrl } from "../utils/imageUtils";
 
 interface ProductFormProps {
   form: any;
@@ -145,6 +146,21 @@ const ProductForm: React.FC<ProductFormProps> = ({
           </label>
         </div>
       </div>
+      <div className="space-y-1">
+        <label className="block text-sm font-medium text-gray-700">Actif</label>
+        <div className="flex items-center mt-1">
+          <input
+            type="checkbox"
+            checked={form.active}
+            onChange={e => onChange("active", e.target.checked)}
+            className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+            id={mode === "create" ? "create-active-checkbox" : "edit-active-checkbox"}
+          />
+          <label htmlFor={mode === "create" ? "create-active-checkbox" : "edit-active-checkbox"} className="ml-2 text-sm text-gray-700">
+            Ce produit est actif
+          </label>
+        </div>
+      </div>
       <div className="col-span-2 space-y-1">
         <label className="block text-sm font-medium text-gray-700">Images</label>
         <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg">
@@ -199,6 +215,34 @@ const ProductForm: React.FC<ProductFormProps> = ({
               ))}
             </div>
           </div>
+        )}
+      </div>
+      <div className="col-span-2 space-y-1">
+        <label className="block text-sm font-medium text-gray-700">Images existantes</label>
+        {form.existingImages && form.existingImages.length > 0 ? (
+          <div className="mt-2 grid grid-cols-4 gap-2">
+            {form.existingImages.map((img: any, idx: number) => (
+              <div key={img.id || idx} className="relative group">
+                <div className="h-20 w-full rounded-lg border border-gray-300 bg-gray-50 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={normalizeImageUrl(img.url)}
+                    alt={img.name || `Image ${idx + 1}`}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onChange("removeExistingImage", img.id)}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-sm hover:bg-red-600"
+                  title="Supprimer cette image"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">Aucune image existante</p>
         )}
       </div>
       <div className="col-span-2 flex justify-end space-x-3 mt-6 pt-4 border-t">

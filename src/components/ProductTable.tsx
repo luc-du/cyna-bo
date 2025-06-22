@@ -1,4 +1,5 @@
 import React from "react";
+import { normalizeImageUrl } from "../utils/imageUtils";
 
 interface ProductTableProps {
   products: any[];
@@ -54,7 +55,9 @@ const ProductTable: React.FC<ProductTableProps> = ({
     </thead>
     <tbody className="divide-y divide-gray-200 bg-white">
       {paginatedProducts.map((product: any) => (
-        <tr key={product.id} className="hover:bg-gray-50 cursor-pointer transition-colors duration-150" onClick={() => handleViewDetails(product)}>
+        <tr key={product.id} 
+            className={`hover:bg-gray-50 cursor-pointer transition-colors duration-150 ${product.active === false ? 'bg-gray-200 text-gray-400 opacity-60' : ''}`}
+            onClick={() => handleViewDetails(product)}>
           <td className="py-4 px-4" onClick={e => e.stopPropagation()}>
             <input
               type="checkbox"
@@ -65,24 +68,22 @@ const ProductTable: React.FC<ProductTableProps> = ({
           </td>
           <td className="px-4 py-4">
             <div className="flex items-center">
-              {/* Ajout affichage image produit */}
               {product.images && product.images.length > 0 ? (
                 <div className="relative h-10 w-10 mr-3">
-                  {/* Display product image or fallback */}
                   <img
-                    src={product.images[0].url} // L'URL est déjà normalisée par le store
+                    src={normalizeImageUrl(product.images[0].url)}
                     alt={product.name}
                     className="h-10 w-10 rounded-lg object-cover cursor-pointer bg-gray-200"
                     style={{ display: "block" }}
                     onClick={e => {
                       e.stopPropagation();
-                      setPreviewImage(product.images[0].url); // L'URL est déjà normalisée
+                      setPreviewImage(normalizeImageUrl(product.images[0].url));
                     }}
                     onError={e => {
                       const img = e.target as HTMLImageElement;
-                      img.style.display = "none";
-                      const fallback = img.nextElementSibling as HTMLElement;
-                      if (fallback) fallback.style.display = "flex";
+                      img.onerror = null; // Prevent infinite loop
+                      img.src = "https://placehold.co/400x300?text=Image+non+disponible";
+                      console.warn(`Failed to load image: ${product.images[0].url}`);
                     }}
                   />
                   <div style={{ display: "none" }} className="absolute inset-0 h-10 w-10 rounded-lg bg-gray-200 flex items-center justify-center">
@@ -129,3 +130,4 @@ const ProductTable: React.FC<ProductTableProps> = ({
 );
 
 export default ProductTable;
+

@@ -1,30 +1,37 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import { X } from "lucide-react";
+import notification from "../lib/notification";
+import withAdvancedFeatures from "../lib/withAdvancedFeatures";
+import { useCategoryActions } from "../lib/categoryActions";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import {
-  deleteCategory,
   fetchCategories,
   searchCategories,
-  deleteMultipleCategories,
   fetchCategoryDetails,
 } from "../store/categoryStore";
-import { X } from "lucide-react";
 import { CategoryForm } from "../components/category";
+import { normalizeImageUrl } from "../utils/imageUtils";
 
-const normalizeImageUrl = (url: string): string => {
-  const IMAGE_BASE_URL = import.meta.env.VITE_IMAGE_BASE_URL || "http://localhost:8082";
-  if (!url) return "";
-  return url.startsWith('http') ? url : `${IMAGE_BASE_URL}${url}`;
-};
+interface Category {
+  id: number;
+  name: string;
+  description?: string;
+  images?: { url: string }[];
+  products?: any[];
+}
 
-export default function Categories() {
+const Categories = () => {
   const dispatch = useAppDispatch();
   const { categories, loading } = useAppSelector((state) => state.categories);
+  
+  // Utiliser les actions centralisées pour les catégories avec dialogue de confirmation
+  const { handleDeleteCategory, handleBulkDeleteCategories } = useCategoryActions();
 
   const [search, setSearch] = useState("");
   const [searchTimeout, setSearchTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [editingCategory, setEditingCategory] = useState<number | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<any | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -62,12 +69,16 @@ export default function Categories() {
     }
   };
 
-  const handleViewDetails = async (category: any) => {
-    const result = await dispatch(fetchCategoryDetails(category.id));
-    if (result.payload) {
-      setSelectedCategory(result.payload);
-    } else {
-      setSelectedCategory(category);
+  const handleViewDetails = async (category: Category) => {
+    try {
+      const result = await dispatch(fetchCategoryDetails(category.id));
+      if (result.payload) {
+        setSelectedCategory(result.payload);
+      } else {
+        setSelectedCategory(category);
+      }
+    } catch (error) {
+      notification.error("Impossible de récupérer les détails de la catégorie");
     }
   };
 
@@ -93,20 +104,19 @@ export default function Categories() {
     setSortConfig({ key, direction });
   };
 
-  const handleDeleteCategory = async (categoryId: number) => {
-    if (window.confirm("Êtes-vous sûr de vouloir supprimer cette catégorie ?")) {
-      await dispatch(deleteCategory(categoryId));
-      dispatch(fetchCategories());
+  // Utilisation de la fonction de suppression centralisée
+  const handleCategoryDelete = async (categoryId: number) => {
+    const category = categories.find((c) => c.id === categoryId);
+    if (category) {
+      await handleDeleteCategory(categoryId, category.name);
     }
   };
 
+  // Utilisation de la fonction de suppression en masse centralisée
   const handleBulkDelete = async () => {
-    if (selectedCategories.length === 0) return;
-
-    if (window.confirm(`Êtes-vous sûr de vouloir supprimer ${selectedCategories.length} catégorie(s) ?`)) {
-      await dispatch(deleteMultipleCategories(selectedCategories));
+    if (selectedCategories.length > 0) {
+      await handleBulkDeleteCategories(selectedCategories);
       setSelectedCategories([]);
-      dispatch(fetchCategories());
     }
   };
 
@@ -125,6 +135,12 @@ export default function Categories() {
     currentPage * itemsPerPage
   );
   const totalPages = Math.ceil(sortedCategories.length / itemsPerPage);
+
+  // Ajout d'une fonction de débogage pour tracer le chemin des images
+  const debugImageUrl = (url: string): string => {
+    const normalized = normalizeImageUrl(url);
+    return normalized;
+  };
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
@@ -226,17 +242,22 @@ export default function Categories() {
                 {selectedCategory.images && selectedCategory.images.length > 0 ? (
                   <div className="grid grid-cols-3 gap-4">
                     {selectedCategory.images.map((image: any, index: number) => {
-                      const imageUrl = normalizeImageUrl(image.url);
                       return (
                         <div key={index} className="relative group">
                           <img
-                            src={imageUrl}
+                            src={normalizeImageUrl(image.url)}
                             alt={`Catégorie ${index + 1}`}
                             className="w-full h-40 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              setPreviewImage(imageUrl);
+                              setPreviewImage(normalizeImageUrl(image.url));
+                            }}
+                            onError={(e) => {
+                              const img = e.target as HTMLImageElement;
+                              img.onerror = null; // Prevent infinite loop
+                              img.src = "https://placehold.co/400x300?text=Image+non+disponible";
+                              console.warn(`Failed to load image: ${image.url}`);
                             }}
                           />
                           <div 
@@ -244,7 +265,7 @@ export default function Categories() {
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              setPreviewImage(imageUrl);
+                              setPreviewImage(image.url);
                             }}
                           ></div>
                         </div>
@@ -360,7 +381,7 @@ export default function Categories() {
                         <div className="flex items-center">
                           {category.images && category.images.length > 0 ? (
                             (() => {
-                              const imageUrl = normalizeImageUrl(category.images[0].url);
+                              const imageUrl = debugImageUrl(category.images[0].url);
                               return (
                                 <img
                                   src={imageUrl}
@@ -372,7 +393,9 @@ export default function Categories() {
                                   }}
                                   onError={e => {
                                     const img = e.target as HTMLImageElement;
-                                    img.style.display = "none";
+                                    img.onerror = null; // Prevent infinite loop
+                                    img.src = "https://placehold.co/400x300?text=Image+non+disponible";
+                                    console.warn(`Failed to load image: ${category.images[0].url}, normalized: ${imageUrl}`);
                                     const fallback = img.nextElementSibling as HTMLElement;
                                     if (fallback) fallback.style.display = "flex";
                                   }}
@@ -393,7 +416,7 @@ export default function Categories() {
                         </div>
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-500">
-                        <span className="font-medium">{category.products.length || 0}</span> produits
+                        <span className="font-medium">{category.products?.length || 0}</span> produits
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-500" onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-2">
@@ -409,7 +432,7 @@ export default function Categories() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDeleteCategory(category.id);
+                              handleCategoryDelete(category.id);
                             }}
                             className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md transition-colors duration-200"
                           >
@@ -422,7 +445,7 @@ export default function Categories() {
                 </tbody>
               </table>
               {totalPages > 1 && (
-                <div className="flex flex-col items-center gap-2 mt-4">
+                <div className="flex flex-col items-center gap-2 mt-4 mb-4">
                   <div className="flex gap-2">
                     <button
                       className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
@@ -496,11 +519,17 @@ export default function Categories() {
             </div>
             <div className="w-full h-full flex items-center justify-center overflow-auto p-4">
               <img
-                src={previewImage}
+                src={previewImage ? normalizeImageUrl(previewImage) : ""}
                 alt="Aperçu plein écran"
                 className="max-w-full max-h-full object-contain cursor-zoom-in hover:scale-110 transition-transform duration-300"
                 onClick={(e) => e.stopPropagation()}
                 style={{ objectFit: "contain" }}
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement;
+                  img.onerror = null;
+                  img.src = "https://placehold.co/400x300?text=Image+non+disponible";
+                  console.warn(`Failed to load preview image: ${previewImage}`);
+                }}
               />
             </div>
             <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black bg-opacity-50 px-4 py-2 rounded-full">
@@ -511,4 +540,7 @@ export default function Categories() {
       )}
     </div>
   );
-}
+};
+
+// Export le composant enrichi avec le système de confirmations
+export default withAdvancedFeatures(Categories);

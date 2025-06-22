@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef, Suspense, lazy } from "react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import {
-  deleteProduct,
   fetchProducts,
   searchProducts,
   updateProduct,
@@ -22,11 +21,11 @@ const LazyProductDetailModal = lazy(() => import("../components/ProductDetailMod
 export default function Products() {
   const dispatch = useAppDispatch();
 
-  // Redux selectors without strict typing to avoid errors
-  const productsState = useAppSelector((state: any) => state.products);
+  // Typage plus strict pour les sélecteurs Redux
+  const productsState = useAppSelector((state: { products: any }) => state.products);
   const products = productsState.products;
   const loading = productsState.loading;
-  const categoriesState = useAppSelector((state: any) => state.categories);
+  const categoriesState = useAppSelector((state: { categories: any }) => state.categories);
   const categories = categoriesState.categories;
 
   const [search, setSearch] = useState("");
@@ -44,8 +43,9 @@ export default function Products() {
     categoryId: "",
     status: "AVAILABLE",
     images: [] as File[],
-    existingImages: [] as any[], // Ajout pour stocker les images déjà uploadées
+    existingImages: [] as any[],
     promo: false,
+    active: true,
   });
   const [createForm, setCreateForm] = useState({
     name: "",
@@ -58,6 +58,7 @@ export default function Products() {
     status: "AVAILABLE",
     images: [] as File[],
     promo: false,
+    active: true, // Ajouté
   });
 
   // Validation error states
@@ -153,11 +154,14 @@ export default function Products() {
           images: [],
           existingImages: product.images || [], // On conserve les images existantes
           promo: !!product.promo,
+          active: typeof product.active === 'boolean' ? product.active : true, // Ajouté
         });
         setEditingProduct(productId);
       }
     });
   };
+
+  const [imagesToDelete, setImagesToDelete] = useState<number[]>([]);
 
   const handleSave = async () => {
     if (!editingProduct) {
@@ -168,6 +172,12 @@ export default function Products() {
     const errors = validateForm(editForm);
     setEditErrors(errors);
     if (Object.keys(errors).length > 0) return;
+
+    // Vérification critique : empêcher la suppression de toutes les images
+    if (editForm.existingImages.length - imagesToDelete.length + editForm.images.length === 0) {
+      showNotification('error', "Un produit doit avoir au moins une image. Ajoutez une image avant de supprimer toutes les anciennes.");
+      return;
+    }
 
     // Create form data for submission
     const formData = new FormData();
@@ -182,6 +192,7 @@ export default function Products() {
     }
     formData.append("status", editForm.status);
     formData.append("promo", String(editForm.promo));
+    formData.append("active", String(editForm.active)); // Ajouté
     formData.append("skipStripeOnError", "true");
 
     // Logging pour débogage
@@ -192,20 +203,61 @@ export default function Products() {
     if (editForm.images && editForm.images.length > 0) {
       console.log("Ajout des nouvelles images au FormData:");
       editForm.images.forEach((file, idx) => {
-        console.log(`- Image ${idx + 1}:`, file.name);
+        console.log(`- Image ${idx + 1}: ${file.name}`);
         formData.append("images", file);
       });
+    } else {
+      // S'assurer qu'aucun champ 'images' vide n'est envoyé
+      formData.delete && formData.delete("images");
     }
 
     try {
       showNotification('success', 'Mise à jour du produit en cours...');
-      
+      // 1. Mettre à jour le produit (ajout d'images)
       const result = await dispatch(updateProduct({ id: editingProduct, data: formData }));
-      
-      // Vérifier le résultat
       if (result.meta.requestStatus === 'fulfilled') {
-        console.log("Mise à jour réussie:", result.payload);
-        await dispatch(fetchProductDetails(editingProduct));
+        // Rafraîchir les images existantes depuis le backend
+        const details = await dispatch(fetchProductDetails(editingProduct));
+        let backendImages: string | any[] = [];
+        if (details.payload && details.payload.images) {
+          backendImages = details.payload.images;
+          setEditForm(prev => ({ ...prev, existingImages: Array.isArray(backendImages) ? backendImages : [] }));
+        }
+        // 2. Supprimer les images sélectionnées à supprimer (après update ET fetch)
+        if (imagesToDelete.length > 0) {
+          // Correction : NE PAS supprimer toutes les images, toujours en laisser au moins une
+          if (backendImages.length - imagesToDelete.length < 1) {
+            showNotification('error', "Impossible de supprimer toutes les images. Un produit doit avoir au moins une image.");
+            return;
+          }
+          try {
+            const token = localStorage.getItem("token");
+            const response = await fetch(`${import.meta.env.VITE_PRODUCT_API_BASE_URL || "http://localhost:8082/api/v1/products"}/${editingProduct}/images`, {
+              method: "DELETE",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify(imagesToDelete),
+            });
+            if (!response.ok) {
+              const errorText = await response.text();
+              showNotification('error', `Erreur lors de la suppression d'images: ${errorText}`);
+              return;
+            }
+            setEditForm(prev => ({
+              ...prev,
+              existingImages: prev.existingImages.filter(img => !imagesToDelete.includes(img.id)),
+            }));
+            setImagesToDelete([]);
+          } catch (err) {
+            showNotification('error', "Erreur lors de la suppression d'images");
+            return;
+          }
+        }
+        // Vider les images ajoutées après succès
+        setEditForm(prev => ({ ...prev, images: [] }));
+        setImagesToDelete([]);
         await dispatch(fetchProducts());
         setEditingProduct(null);
         setCurrentPage(1);
@@ -258,6 +310,7 @@ export default function Products() {
     formData.append("categoryId", createForm.categoryId);
     formData.append("status", createForm.status);
     formData.append("promo", String(createForm.promo));
+    formData.append("active", String(createForm.active)); // Ajouté
     formData.append("skipStripeOnError", "true");
     createForm.images.forEach((file) => {
       formData.append("images", file);
@@ -286,6 +339,7 @@ export default function Products() {
         status: "AVAILABLE",
         images: [],
         promo: false,
+        active: true, // Ajouté
       });
       await dispatch(fetchProducts());
       setCreatingProduct(false);
@@ -341,9 +395,32 @@ export default function Products() {
     }
   };
 
-  const handleDeleteProduct = (productId: number) => {
-    if (window.confirm("Êtes-vous sûr de vouloir supprimer ce produit ?")) {
-      dispatch(deleteProduct(productId));
+  const handleDeleteProduct = async (productId: number) => {
+    if (window.confirm("Êtes-vous sûr de vouloir désactiver ce produit ?")) {
+      // On récupère le produit pour garder ses infos
+      const product = products.find((p: any) => Number(p.id) === Number(productId));
+      if (!product) {
+        showNotification('error', "Produit introuvable.");
+        return;
+      }
+      // On prépare le formData pour updateProduct
+      const formData = new FormData();
+      formData.append("id", productId.toString());
+      formData.append("name", product.name);
+      formData.append("brand", product.brand);
+      formData.append("description", product.description);
+      formData.append("caracteristics", product.caracteristics);
+      formData.append("pricingModel", product.pricingModel);
+      formData.append("amount", product.amount.toString());
+      formData.append("categoryId", product.categoryId?.toString() || (product.category?.id?.toString() || ""));
+      formData.append("status", product.status);
+      formData.append("promo", String(product.promo));
+      formData.append("active", "false");
+      formData.append("skipStripeOnError", "true");
+      // On désactive le produit
+      await dispatch(updateProduct({ id: productId, data: formData }));
+      showNotification('success', 'Produit désactivé (inactif).');
+      await dispatch(fetchProducts());
     }
   };
 
@@ -427,14 +504,6 @@ export default function Products() {
     currentPage * itemsPerPage
   );
   const totalPages = Math.ceil(sortedProducts.length / itemsPerPage);
-
-  // Fonction utilitaire pour obtenir l'URL de l'image principale d'un produit
-  const getProductImageUrl = (product: any) => {
-    if (!product.images || product.images.length === 0) return null;
-    const img = product.images[0];
-    if (!img.url) return null;
-    return img.url.startsWith("http") ? img.url : `${IMAGE_BASE_URL}${img.url}`;
-  };
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
@@ -541,7 +610,6 @@ export default function Products() {
                 setPreviewImage={setPreviewImage}
                 getCategoryName={getCategoryName}
                 translateStatus={translateStatus}
-                IMAGE_BASE_URL={IMAGE_BASE_URL}
               />
             </Suspense>
           );
@@ -605,7 +673,13 @@ export default function Products() {
               mode="edit"
               onChange={(field, value) => {
                 if (field === "cancel") setEditingProduct(null);
-                else setEditForm({ ...editForm, [field]: value });
+                else if (field === "removeExistingImage") {
+                  setEditForm(prev => ({
+                    ...prev,
+                    existingImages: prev.existingImages.filter(img => img.id !== value),
+                  }));
+                  setImagesToDelete(prev => [...prev, value]);
+                } else setEditForm({ ...editForm, [field]: value });
               }}
               onImageChange={handleEditImageChange}
               onImageRemove={idx => {
@@ -618,36 +692,6 @@ export default function Products() {
                 handleSave();
               }}
             />
-            {/* Images existantes */}
-            <div className="col-span-2 space-y-1 mt-6">
-              <label className="block text-sm font-medium text-gray-700">Images existantes</label>
-              <div className="grid grid-cols-2 gap-4">
-                {editForm.existingImages && editForm.existingImages.length > 0 ? (
-                  editForm.existingImages.map((image: any, idx: number) => {
-                    const imageUrl = image.url?.startsWith("http")
-                      ? image.url
-                      : `${IMAGE_BASE_URL}${image.url}`;
-                    return (
-                      <div key={idx} className="relative group">
-                        <img
-                          src={imageUrl}
-                          alt={`Produit ${idx + 1}`}
-                          className="w-full h-32 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
-                          onClick={e => {
-                            e.stopPropagation();
-                            setPreviewImage(imageUrl);
-                          }}
-                        />
-                        {/* Optionnel : bouton pour supprimer l'image existante */}
-                        {/* <button onClick={() => handleRemoveExistingImage(idx)} className="absolute top-2 right-2 bg-black bg-opacity-50 text-white rounded-full p-1">&times;</button> */}
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="col-span-2 text-gray-400">Aucune image existante</div>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -678,7 +722,7 @@ export default function Products() {
                 />
               )}
               {/* Pagination controls et empty state restent ici */}
-              {true && ( // Remplace temporairement totalPages > 1 par true pour forcer l'affichage
+              {totalPages > 1 && (
                 <div className="flex flex-col items-center gap-2 mt-4">
                   <div className="flex gap-2">
                     <button

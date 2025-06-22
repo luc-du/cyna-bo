@@ -1,12 +1,8 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import axios from "axios";
-import { jwtDecode } from "jwt-decode";
 import type { User } from "../types/index";
-
-// Auth API base URL
-const API_BASE_URL = "/api/v1/auth";
-// User API base URL
-const USER_API_BASE_URL = "/api/v1/user";
+import { AUTH_API_URL, USER_API_URL } from "../lib/constants";
+import { CustomAxiosError, DecodedToken, AuthResponse } from "../types/api";
 
 /* User signup */
 export const registerUser = createAsyncThunk(
@@ -22,20 +18,19 @@ export const registerUser = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/signup`, {
+      const response = await axios.post<AuthResponse>(`${AUTH_API_URL}/signup`, {
         ...userData,
         role: "ADMIN", // Default role is ADMIN
       });
       localStorage.setItem("token", response.data.token);
-      // Avoid logging tokens in production
-      // console.log("Token received (signup):", response.data.token);
       return { token: response.data.token };
     } catch (error) {
-      if ((error as any).response?.data?.message?.includes("Duplicate entry")) {
+      const axiosError = error as CustomAxiosError;
+      if (axiosError.response?.data?.message?.includes("Duplicate entry")) {
         return rejectWithValue("This email is already used.");
       }
       return rejectWithValue(
-        (error as any).response?.data || "Error during registration"
+        axiosError.response?.data?.message || "Error during registration"
       );
     }
   }
@@ -49,18 +44,26 @@ export const loginUser = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/signin`, userData);
+      const response = await axios.post<AuthResponse>(`${AUTH_API_URL}/signin`, userData);
       const token = response.data.token;
       if (!token) {
         throw new Error("Token not received");
       }
       localStorage.setItem("token", token);
-      // Avoid logging tokens in production
-      // console.log("Token stored (login):", token);
       return { token };
     } catch (error) {
+      const axiosError = error as CustomAxiosError;
+      
+      if (axiosError.response?.status === 401) {
+        return rejectWithValue("Email ou mot de passe incorrect");
+      } else if (axiosError.response?.status === 403) {
+        return rejectWithValue("Accès refusé. Vous n'avez pas les autorisations nécessaires.");
+      } else if (axiosError.response?.status === 400 && axiosError.response.data?.message?.includes("captcha")) {
+        return rejectWithValue("Validation du captcha échouée. Veuillez réessayer.");
+      }
+      
       return rejectWithValue(
-        (error as any).response?.data || "Incorrect email or password!"
+        axiosError.response?.data?.message || "Erreur lors de la connexion. Veuillez réessayer."
       );
     }
   }
@@ -73,12 +76,11 @@ export const validateToken = createAsyncThunk(
     try {
       const token = localStorage.getItem("token");
       // Avoid logging tokens in production
-      // console.log("Token retrieved (validateToken):", token);
       if (!token) {
         throw new Error("Token not available");
       }
       const response = await axios.post(
-        `${API_BASE_URL}/validate`,
+        `${AUTH_API_URL}/validate`,
         { token },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -100,30 +102,35 @@ export const fetchUserProfile = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     const token = localStorage.getItem("token");
     if (!token) {
-      // Don't log, don't try to decode, just reject
       return rejectWithValue("Missing token, please reconnect.");
     }
     try {
-      const decodedToken: any = JSON.parse(atob(token.split(".")[1]));
-      const userId = decodedToken.jti; 
-
-      if (!userId) {
-        return rejectWithValue("User ID not available in token");
+      // Décoder le token de manière plus sécurisée
+      const parts = token.split(".");
+      if (parts.length !== 3) {
+        return rejectWithValue("Invalid token format");
       }
+      
+      try {
+        const decodedToken = JSON.parse(atob(parts[1])) as DecodedToken;
+        const userId = decodedToken.jti;
 
-      const response = await axios.get(`${USER_API_BASE_URL}/${userId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+        if (!userId) {
+          return rejectWithValue("User ID not available in token");
+        }
 
-      return response.data;
+        const response = await axios.get<User>(`${USER_API_URL}/${userId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        return response.data;
+      } catch (parseError) {
+        return rejectWithValue("Unable to parse token");
+      }
     } catch (error) {
-      console.error(
-        "Error fetching user profile:",
-        error
-      );
+      const axiosError = error as CustomAxiosError;
       return rejectWithValue(
-        (error as any).response?.data?.message ||
-          "Unable to fetch user profile"
+        axiosError.response?.data?.message || "Unable to fetch user profile"
       );
     }
   }

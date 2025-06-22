@@ -1,14 +1,20 @@
 import React from "react";
 import { X } from "lucide-react";
+import { normalizeImageUrl, ProductWithImages, ProductImage } from "../utils/imageUtils";
+
+interface Category {
+  id: string;
+  name: string;
+  description?: string;
+}
 
 interface ProductDetailModalProps {
-  product: any;
-  categories: any[];
+  product: ProductWithImages;
+  categories: Category[];
   onClose: () => void;
-  getCategoryName: (categoryOrId: any) => string;
+  getCategoryName: (categoryOrId: string | Category) => string;
   translateStatus: (status: string) => string;
   setPreviewImage: (url: string) => void;
-  IMAGE_BASE_URL: string;
 }
 
 const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
@@ -17,9 +23,9 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   getCategoryName,
   translateStatus,
   setPreviewImage,
-  IMAGE_BASE_URL,
 }) => {
   if (!product) return null;
+  
   return (
     <div className="fixed inset-0 bg-gray-900 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-[1000] transition-all duration-300">
       <div
@@ -30,7 +36,12 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         aria-label="Détails du produit"
       >
         <div className="flex justify-between items-center mb-6 border-b pb-4">
-          <h3 className="text-xl font-semibold text-gray-800">{product.name}</h3>
+          <h3 className="text-xl font-semibold text-gray-800">
+            {product.name}
+            {product.active === false && (
+              <span className="ml-4 px-3 py-1 rounded-full bg-gray-300 text-gray-700 text-xs font-semibold align-middle">Produit inactif</span>
+            )}
+          </h3>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors duration-200"
@@ -40,15 +51,11 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-4">
-            <div className="flex items-center">
-              <span className="text-gray-500 w-32">Marque:</span>
-              <span className="font-medium">{product.brand}</span>
-            </div>
-            <div>
+            <div className="flex flex-col">
               <span className="text-gray-500">Description:</span>
               <p className="mt-1 text-gray-800">{product.description}</p>
             </div>
-            <div>
+            <div className="flex flex-col">
               <span className="text-gray-500">Caractéristiques:</span>
               <p className="mt-1 text-gray-800">{product.caracteristics}</p>
             </div>
@@ -85,27 +92,29 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             <h4 className="font-semibold text-gray-800 mb-4">Images</h4>
             {product.images && product.images.length > 0 ? (
               <div className="grid grid-cols-2 gap-4">
-                {product.images.map((image: any, index: number) => {
-                  // Les URL sont déjà normalisées par le store
+                {product.images.map((image: ProductImage, index: number) => {
+                  // Assurer que l'image a une URL
+                  if (!image || !image.url) {
+                    return null;
+                  }
+                  
+                  const imageUrl = normalizeImageUrl(image.url);
                   return (
                     <div key={index} className="relative group">
                       <img
-                        src={image.url}
+                        src={imageUrl}
                         alt={`Produit ${index + 1}`}
                         className="w-full h-40 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
-                        onClick={e => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setPreviewImage(image.url);
+                        onClick={() => setPreviewImage(imageUrl)}
+                        onError={(e) => {
+                          const img = e.target as HTMLImageElement;
+                          img.onerror = null; // Prevent infinite loop
+                          img.src = "https://placehold.co/400x300?text=Image+non+disponible";
                         }}
                       />
                       <div
                         className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all duration-200"
-                        onClick={e => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setPreviewImage(image.url);
-                        }}
+                        onClick={() => setPreviewImage(imageUrl)}
                       ></div>
                     </div>
                   );
@@ -120,7 +129,7 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         </div>
         <div className="mt-8 flex justify-end">
           <button
-            onClick={e => {
+            onClick={(e) => {
               e.stopPropagation();
               onClose();
             }}

@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
+import { normalizeImageUrls, normalizeItemImages } from '../utils/imageUtils';
 
 // Constants
 const CATEGORY_API_BASE_URL = '/api/v1/categories';
@@ -60,16 +61,14 @@ const initialState: CategoryState = {
 export const fetchCategories = createAsyncThunk('categories/fetchAll', async (_, { rejectWithValue }) => {
   try {
     const headers = getAuthHeaders();
-    // Debug: log headers to ensure token is present
-    console.log("fetchCategories headers:", headers);
     const response = await axios.get(CATEGORY_API_BASE_URL, {
       headers,
     });
-    return response.data;
+    // Normaliser les images des catégories
+    return response.data.map((category: any) => normalizeCategoryImages(category));
   } catch (error: any) {
     // Debug: log error details for 400 errors
     if (error.response) {
-      console.error("fetchCategories error response:", error.response);
       if (error.response.data && error.response.data.message) {
         return rejectWithValue(error.response.data.message);
       }
@@ -85,7 +84,6 @@ export const searchCategories = createAsyncThunk("categories/searchCategories", 
   try {
     // If search term is too short, grab all categories instead of using the search endpoint
     if (name.length < 3) {
-      console.log("Search term too short, filtering categories client-side");
       const allCategories = await dispatch(fetchCategories()).unwrap();
       
       // Filter categories in the frontend based on the search term
@@ -104,7 +102,6 @@ export const searchCategories = createAsyncThunk("categories/searchCategories", 
     });
     
     if (!response.ok) {
-      console.warn(`Category search endpoint returned ${response.status}: ${response.statusText}`);
       
       // Fall back to client-side filtering
       const allCategories = await dispatch(fetchCategories()).unwrap();
@@ -121,8 +118,6 @@ export const searchCategories = createAsyncThunk("categories/searchCategories", 
     const data = await response.json();
     return Array.isArray(data) ? data : [];
   } catch (error) {
-    console.error("Search category error:", error);
-    // Return empty array instead of rejecting to prevent UI errors
     return [];
   }
 });
@@ -177,7 +172,15 @@ export const updateCategory = createAsyncThunk(
         throw new Error(errorText || 'Failed to update category');
       }
       
-      return await response.text();
+      const responseText = await response.text();
+      try {
+        // Si la réponse est du JSON, normaliser les images
+        const data = JSON.parse(responseText);
+        return normalizeCategoryImages(data);
+      } catch (e) {
+        // Si ce n'est pas du JSON, retourner le texte brut
+        return responseText;
+      }
     } catch (error: any) {
       if (error.message === "No token found") {
         return rejectWithValue("Token manquant, veuillez vous reconnecter.");
@@ -228,7 +231,7 @@ export const fetchCategoryDetails = createAsyncThunk(
       const response = await axios.get(`${CATEGORY_API_BASE_URL}/${categoryId}`, {
         headers,
       });
-      return response.data;
+      return normalizeCategoryImages(response.data);
     } catch (error: any) {
       if (error.message === "No token found") {
         return rejectWithValue("Token manquant, veuillez vous reconnecter.");
@@ -237,6 +240,13 @@ export const fetchCategoryDetails = createAsyncThunk(
     }
   }
 );
+
+// Fonction utilitaire pour normaliser les images d'une catégorie
+const normalizeCategoryImages = (category: any): any => {
+  if (!category) return category;
+  
+  return normalizeItemImages(category);
+};
 
 // Slice
 const categorySlice = createSlice({

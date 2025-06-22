@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import { Lock, Mail, User } from "lucide-react";
@@ -9,7 +9,11 @@ import store from "../store/store";
 import logo from "../assets/cyna.jpeg";
 import ReCAPTCHA from "react-google-recaptcha";
 
-export default function LoginPage() {
+interface LoginPageProps {
+  initialError?: string | null;
+}
+
+export default function LoginPage({ initialError }: LoginPageProps) {
   const navigate = useNavigate();
   const dispatch = useDispatch<typeof store.dispatch>();
   const { loading } = useSelector((state: RootState) => state.auth);
@@ -21,7 +25,13 @@ export default function LoginPage() {
     password: "",
   });
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
-  const RECAPTCHA_SITE_KEY = "6Lc02VcrAAAAAIpBxoS5Rc22Q5nl9ljJQBZoJZTb"; // Clé front reCAPTCHA
+  const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY; 
+
+  useEffect(() => {
+    if (initialError) {
+      toast.error(initialError);
+    }
+  }, [initialError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

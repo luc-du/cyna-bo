@@ -13,7 +13,7 @@ export const registerUser = createAsyncThunk(
       lastname: string;
       email: string;
       password: string;
-      captchaToken?: string; // Captcha token
+ //     captchaToken?: string; // Captcha token
     },
     { rejectWithValue }
   ) => {
@@ -40,7 +40,7 @@ export const registerUser = createAsyncThunk(
 export const loginUser = createAsyncThunk(
   "auth/login",
   async (
-    userData: { email: string; password: string; captchaToken?: string }, // Captcha token
+    userData: { email: string; password: string;}, //captchaToken?: string }, // Captcha token
     { rejectWithValue }
   ) => {
     try {

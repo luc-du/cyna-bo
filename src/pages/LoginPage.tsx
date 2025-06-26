@@ -24,8 +24,8 @@ export default function LoginPage({ initialError }: LoginPageProps) {
     email: "",
     password: "",
   });
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
-  const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY; 
+  // const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+ // const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY; 
 
   useEffect(() => {
     if (initialError) {
@@ -36,11 +36,11 @@ export default function LoginPage({ initialError }: LoginPageProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!captchaToken) {
+    {/*  if (!captchaToken) {
       toast.error("Veuillez valider le captcha.");
       return;
-    }
-
+    } */}
+   
     try {
       console.log("Form data submitted:", formData);
       if (isSignup) {
@@ -50,7 +50,7 @@ export default function LoginPage({ initialError }: LoginPageProps) {
             lastname: formData.lastname,
             email: formData.email,
             password: formData.password,
-            captchaToken, // Ajout du token captcha
+           // captchaToken, // Ajout du token captcha
           })
         ).unwrap();
         toast.success(
@@ -59,7 +59,7 @@ export default function LoginPage({ initialError }: LoginPageProps) {
         );
       } else {
         await dispatch(
-          loginUser({ email: formData.email, password: formData.password, captchaToken }) // Ajout du token captcha
+          loginUser({ email: formData.email, password: formData.password}) //, captchaToken }) // Ajout du token captcha
         ).unwrap();
         toast.success("Connexion réussie");
       }
@@ -165,13 +165,13 @@ export default function LoginPage({ initialError }: LoginPageProps) {
               />
             </div>
           </div>
-
-          <div className="flex justify-center">
+{          /* <div className="flex justify-center">
             <ReCAPTCHA
               sitekey={RECAPTCHA_SITE_KEY}
               onChange={(token) => setCaptchaToken(token)}
             />
-          </div>
+          </div> */}
+          
 
           <div>
             <button

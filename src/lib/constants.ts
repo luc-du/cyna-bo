@@ -4,7 +4,8 @@
  */
 
 const API_PREFIX = import.meta.env.VITE_API_BASE_URL || '/api';
-export const API_BASE_URL = `${API_PREFIX}/v1`;
+const VITE_API_URL = import.meta.env.VITE_APP_URL || "http://localhost:8080";
+export const API_BASE_URL = `${VITE_API_URL}${API_PREFIX}/v1`;
 export const AUTH_API_URL = `${API_BASE_URL}/auth`;
 export const USER_API_URL = `${API_BASE_URL}/user`;
 export const PRODUCT_API_URL = `${API_BASE_URL}/product`;

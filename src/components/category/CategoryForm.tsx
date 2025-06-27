@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAppDispatch } from "../../store/hooks";
 import { createCategory, updateCategory } from "../../store/categoryStore";
-import { normalizeImageUrl } from "../../utils/imageUtils";
 import { X } from "lucide-react";
 
 interface CategoryFormProps {
@@ -20,8 +19,6 @@ export const CategoryForm = ({
   const dispatch = useAppDispatch();
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Nouvel état pour suivre les images existantes à supprimer
-  const [imagesToDelete, setImagesToDelete] = useState<number[]>([]);
   
   const [form, setForm] = useState({
     name: "",
@@ -36,13 +33,8 @@ export const CategoryForm = ({
         description: initialValues.description || "",
         images: [] 
       });
-      setImagesToDelete([]); // reset on edit
     }
   }, [mode, initialValues]);
-
-  const handleDeleteExistingImage = (imageId: number) => {
-    setImagesToDelete((prev) => [...prev, imageId]);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,19 +42,17 @@ export const CategoryForm = ({
 
     const formData = new FormData();
     formData.append("name", form.name);
+
+    // Always include description, even if empty
     formData.append("description", form.description || "");
+    
     if (form.images && form.images.length > 0) {
       const imageFiles = [...form.images];
       imageFiles.forEach((file) => {
         formData.append("images", file);
       });
     }
-    // Ajouter les images à supprimer si besoin
-    if (imagesToDelete.length > 0) {
-      imagesToDelete.forEach((id) => {
-        formData.append("imagesToDelete", id.toString());
-      });
-    }
+
     try {
       if (mode === "edit" && categoryId) {
         formData.append("id", categoryId.toString());
@@ -134,30 +124,18 @@ export const CategoryForm = ({
             <div className="space-y-1">
               <label className="block text-sm font-medium text-gray-700">Images existantes</label>
               <div className="grid grid-cols-3 gap-4">
-                {initialValues.images.filter((img: any) => !imagesToDelete.includes(img.id)).map((image: any, idx: number) => {
-                  const imageUrl = normalizeImageUrl(image.url);
+                {initialValues.images.map((image: any, idx: number) => {
+                  const imageUrl = image.url?.startsWith("http")
+                    ? image.url
+                    : `http://localhost:8082${image.url}`;
                   return (
-                    <div key={image.id} className="relative group">
+                    <div key={idx} className="relative group">
                       <img
                         src={imageUrl}
                         alt={`Catégorie ${idx + 1}`}
                         className="w-full h-32 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-all duration-200 cursor-pointer"
                         onClick={() => setPreviewImage(imageUrl)}
-                        onError={(e) => {
-                          // En cas d'erreur de chargement, utiliser une image de remplacement
-                          const img = e.target as HTMLImageElement;
-                          img.onerror = null; // Prevent infinite loop
-                          img.src = "https://placehold.co/400x300?text=Image+non+disponible";
-                        }}
                       />
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteExistingImage(image.id)}
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow-sm hover:bg-red-600 z-10"
-                        title="Supprimer cette image"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
                       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all duration-200"></div>
                     </div>
                   );

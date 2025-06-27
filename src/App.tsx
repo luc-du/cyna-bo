@@ -1,31 +1,25 @@
-import { useEffect, useState, Suspense, lazy } from "react";
+import React, { useEffect, useState } from "react";
 import {
   BrowserRouter as Router,
   Routes,
   Route,
   Navigate,
 } from "react-router-dom";
-import { Toaster, toast } from "react-hot-toast";
+import { Toaster } from "react-hot-toast";
 import { useDispatch } from "react-redux";
 import { validateToken, fetchUserProfile } from "./store/authStore";
 import LoginPage from "./pages/LoginPage";
 import DashboardLayout from "./components/layouts/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
+import Products from "./pages/Products";
+import Orders from "./pages/Orders";
+import Support from "./pages/Support";
+import Settings from "./pages/Settings";
+import Users from "./pages/Users";
 import Categories from "./pages/Categories";
+import CarouselAdmin from "./components/CarouselAdmin";
 import { useSelector } from "react-redux";
 import type { RootState, AppDispatch } from "./store/store";
-import Loader from "./components/Loader";
-import { SuspenseFallback } from "./components/Loader";
-import ErrorBoundary from "./components/ErrorBoundary";
-import { ConfirmProvider } from "./lib/confirmContext";
-import { Users } from "lucide-react";
-import Orders from "./pages/Orders";
-import Products from "./pages/Products";
-
-// Lazy load des composants moins critiques
-const LazySettings = lazy(() => import("./pages/Settings"));
-const LazySupport = lazy(() => import("./pages/Support"));
-const LazyCarouselAdmin = lazy(() => import("./components/CarouselAdmin"));
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -44,7 +38,6 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
 function App() {
   const dispatch: AppDispatch = useDispatch();
   const [authInitialized, setAuthInitialized] = useState(false); 
-  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -54,8 +47,8 @@ function App() {
           await dispatch(validateToken()).unwrap();
           await dispatch(fetchUserProfile()).unwrap();
         } catch (error) {
+          console.error("Token validation failed:", error);
           localStorage.removeItem("token");
-          setAuthError("Votre session a expiré. Veuillez vous reconnecter.");
         }
       }
       setAuthInitialized(true); 
@@ -64,60 +57,36 @@ function App() {
     initializeAuth();
   }, [dispatch]);
 
-  // Handler pour les erreurs dans les ErrorBoundaries
-  const handleError = (error: Error) => {
-    toast.error(`Une erreur est survenue: ${error.message}`);
-  };
-
   if (!authInitialized) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader size="large" fullScreen />
-      </div>
-    );
+    return <div>Chargement...</div>;
   }
 
-  return (    <ErrorBoundary onError={handleError}>
-      <Router>
-        <ConfirmProvider>
-          <Routes>
-            <Route path="/login" element={<LoginPage initialError={authError} />} />
-            <Route
-              path="/dashboard/*"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <DashboardLayout />
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-          >
-            <Route index element={<Dashboard />} />            <Route path="products" element={<Products />} />
-            <Route path="categories" element={<Categories />} />
-            <Route path="orders" element={<Orders />} />
-            <Route path="support" element={
-              <Suspense fallback={<SuspenseFallback />}>
-                <LazySupport />
-              </Suspense>
-            } />
-            <Route path="settings" element={
-              <Suspense fallback={<SuspenseFallback />}>
-                <LazySettings />
-              </Suspense>
-            } />
-            <Route path="users" element={<Users />} />
-            <Route path="carousel" element={
-              <Suspense fallback={<SuspenseFallback />}>
-                <LazyCarouselAdmin />
-              </Suspense>
-            } />
-          </Route>
+  return (
+    <Router>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/dashboard/*"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Dashboard />} />
+          <Route path="products" element={<Products />} />
+          <Route path="categories" element={<Categories />} />
+          <Route path="orders" element={<Orders />} />
+          <Route path="support" element={<Support />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="users" element={<Users />} />
+          <Route path="carousel" element={<CarouselAdmin />} />
+        </Route>
 
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />        </Routes>
-        <Toaster position="top-right" />
-        </ConfirmProvider>
-      </Router>
-    </ErrorBoundary>
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+      <Toaster position="top-right" />
+    </Router>
   );
 }
 

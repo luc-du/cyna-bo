@@ -15,7 +15,6 @@ import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { mockSupportTickets } from "../mocks/data";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Legend, CartesianGrid } from "recharts";
-import { normalizeImageUrl } from "../utils/imageUtils";
 
 export default function Dashboard() {
   const dispatch = useDispatch<AppDispatch>();
@@ -422,14 +421,13 @@ export default function Dashboard() {
                       <div className="flex-shrink-0">
                         {product.images && product.images.length > 0 ? (
                           <img
-                            src={normalizeImageUrl(product.images[0].url)}
+                            src={
+                              product.images[0].url?.startsWith("http")
+                                ? product.images[0].url
+                                : `${IMAGE_BASE_URL}${product.images[0].url}`
+                            }
                             alt={product.name}
                             className="h-12 w-12 rounded-md object-cover"
-                            onError={e => {
-                              const img = e.target as HTMLImageElement;
-                              img.onerror = null;
-                              img.src = "https://placehold.co/400x300?text=Image+non+disponible";
-                            }}
                           />
                         ) : (
                           <div className="h-12 w-12 rounded-md bg-gray-200 flex items-center justify-center">
@@ -483,14 +481,13 @@ export default function Dashboard() {
                       <div className="flex-shrink-0">
                         {category.images && category.images.length > 0 ? (
                           <img
-                            src={normalizeImageUrl(category.images[0].url)}
+                            src={
+                              category.images[0].url?.startsWith("http")
+                                ? category.images[0].url
+                                : `${IMAGE_BASE_URL}${category.images[0].url}`
+                            }
                             alt={category.name}
                             className="h-12 w-12 rounded-md object-cover"
-                            onError={e => {
-                              const img = e.target as HTMLImageElement;
-                              img.onerror = null;
-                              img.src = "https://placehold.co/400x300?text=Image+non+disponible";
-                            }}
                           />
                         ) : (
                           <div className="h-12 w-12 rounded-md bg-gray-200 flex items-center justify-center">

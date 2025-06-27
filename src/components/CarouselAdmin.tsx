@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { X, GripVertical, Plus, Trash2, Edit2, Loader2 } from "lucide-react";
-import { normalizeImageUrl } from "@/utils/imageUtils";
 
 // API base for carousel endpoints
 const API_BASE = "/api/v1/carousel";
@@ -37,35 +36,18 @@ export default function CarouselAdmin() {
   });
   const [addLoading, setAddLoading] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
-  // Supprimer la pagination : plus de page ni pageSize
-  // const [page, setPage] = useState(1);
-  // const pageSize = 10;
 
   // Fetch all carousel sections from API
   const fetchSections = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Appel simple sans paramètres de pagination
       const res = await fetch(API_BASE, {
         headers: getAuthHeaders(),
       });
       if (!res.ok) throw new Error("Error loading carousel");
       const data = await res.json();
       setSections(Array.isArray(data) ? data : []);
-      // Ajout d'un log pour vérifier si le dernier élément créé est bien dans la liste
-      if (Array.isArray(data)) {
-        const last = data.find(
-          (item: any) =>
-            item.title === addForm.title &&
-            item.text === addForm.text
-        );
-        if (!last) {
-          console.warn("[fetchSections] L'élément créé n'est pas dans la liste reçue !");
-        } else {
-          console.log("[fetchSections] L'élément créé est bien présent dans la liste.");
-        }
-      }
     } catch (e: any) {
       setError(e?.message || "Error loading carousel");
     }
@@ -74,8 +56,7 @@ export default function CarouselAdmin() {
 
   useEffect(() => {
     fetchSections();
-    // eslint-disable-next-line
-  }, []); // <-- plus de dépendance à page
+  }, []);
 
   // Drag and drop handlers for reordering sections
   const handleDragStart = (idx: number) => setDragIdx(idx);
@@ -116,15 +97,9 @@ export default function CarouselAdmin() {
       formData.append("id", String(editForm.id));
       formData.append("title", editForm.title);
       formData.append("text", editForm.text);
+      if (editForm.image) formData.append("image", editForm.image);
       if (editForm.productId) formData.append("productId", String(editForm.productId));
       if (editForm.categoryId) formData.append("categoryId", String(editForm.categoryId));
-      // Correction : n'envoyer l'image et replaceImage que si une nouvelle image est sélectionnée
-      if (editForm.image) {
-        formData.append("images", editForm.image);
-        formData.append("replaceImage", "true");
-      } else {
-        formData.append("replaceImage", "false");
-      }
       const res = await fetch(API_BASE, {
         method: "PATCH",
         headers: getAuthHeaders(),
@@ -179,48 +154,22 @@ export default function CarouselAdmin() {
       const formData = new FormData();
       formData.append("title", addForm.title);
       formData.append("text", addForm.text);
-      if (addForm.image) {
-        formData.append("images", addForm.image);
-      } else {
-        setAddLoading(false);
-        setError("Veuillez sélectionner une image.");
-        return;
-      }
+      if (addForm.image) formData.append("image", addForm.image);
       if (addForm.productId) formData.append("productId", String(addForm.productId));
       if (addForm.categoryId) formData.append("categoryId", String(addForm.categoryId));
-
-      // LOG: Affichage du contenu du FormData
-      for (const [key, value] of formData.entries()) {
-        if (value instanceof File) {
-          console.log(`[FormData] ${key}:`, value.name, value.type, value.size);
-        } else {
-          console.log(`[FormData] ${key}:`, value);
-        }
-      }
-      console.log("[Fetch] Authorization header:", getAuthHeaders().Authorization);
-
       const res = await fetch(API_BASE, {
         method: "POST",
+        headers: getAuthHeaders(),
         body: formData,
-        headers: {
-          Authorization: getAuthHeaders().Authorization
-        },
-      });
-      // LOG: Affichage du status de la réponse
-      console.log("[Fetch] Status:", res.status);
+      } as any);
       if (!res.ok) {
         const msg = await res.text();
-        console.error("[Fetch] Error response:", msg);
         throw new Error(msg || "Error adding section");
       }
-      // Ajout d'un log pour la réponse du POST
-      const responseBody = await res.json().catch(() => null);
-      console.log("[handleAdd] POST response body:", responseBody);
       setAddForm({ title: "", text: "", image: null, productId: undefined, categoryId: undefined });
       fetchSections();
     } catch (e: any) {
       setError(e?.message || "Error adding section");
-      console.error("[handleAdd] Exception:", e);
     }
     setAddLoading(false);
   };
@@ -303,8 +252,16 @@ export default function CarouselAdmin() {
             <div className="cursor-grab mr-2 text-gray-400">
               <GripVertical />
             </div>
-              <img
-              src={normalizeImageUrl(section.imageUrl || "")}
+            <img
+              src={
+                section.imageUrl
+                  ? section.imageUrl.startsWith("http")
+                    ? section.imageUrl
+                    : section.imageUrl.startsWith("/api")
+                      ? section.imageUrl
+                      : `/api/v1${section.imageUrl}`
+                  : ""
+              }
               alt={section.title}
               className="h-20 w-20 object-cover rounded"
             />
@@ -330,20 +287,12 @@ export default function CarouselAdmin() {
                   onChange={handleEditImage}
                   className="block"
                 />
-                {editForm?.image ? (
+                {editForm?.image && (
                   <img
                     src={URL.createObjectURL(editForm.image as File)}
                     alt="Preview"
                     className="h-12 w-12 object-cover rounded"
                   />
-                ) : (
-                  section.imageUrl && (
-                    <img
-                      src={normalizeImageUrl(section.imageUrl || "")}
-                      alt="Current"
-                      className="h-12 w-12 object-cover rounded"
-                    />
-                  )
                 )}
                 <div className="flex gap-2 mt-2">
                   <button
@@ -391,25 +340,6 @@ export default function CarouselAdmin() {
           </div>
         ))}
       </div>
-      {/* Pagination controls */}
-      {/* 
-      <div className="flex justify-center gap-4 mt-6">
-        <button
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={page === 1}
-          className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
-        >
-          Précédent
-        </button>
-        <span>Page {page}</span>
-        <button
-          onClick={() => setPage((p) => p + 1)}
-          className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
-        >
-          Suivant
-        </button>
-      </div>
-      */}
     </div>
   );
 }

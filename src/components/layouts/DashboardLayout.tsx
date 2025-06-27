@@ -35,8 +35,6 @@ const DashboardLayout: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
 
   const handleLogout = () => {
-    // Supprimer le token du localStorage
-    localStorage.removeItem("token");
     navigate("/login");
   };
 
